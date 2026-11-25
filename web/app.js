@@ -801,6 +801,11 @@ function info(value) {
   );
 }
 function render() {
+  const url = new URL(location.href);
+  if (url.searchParams.get("screen") === "expeditions") {
+    url.searchParams.delete("screen");
+    history.replaceState(null, "", url);
+  }
   const s = game.state,
     p = s.players[game.player],
     title =
