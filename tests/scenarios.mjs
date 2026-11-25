@@ -103,3 +103,50 @@ console.log(
   chosen.length,
   "actions",
 );
+
+for (const seats of [2, 3, 4]) {
+  const runSetup = {
+    setupVersion: 4,
+    heroes: ["tovak", "goldyx", "norowas", "krang"].slice(0, seats),
+    scenario: "lost_relic_cooperative_" + seats + "p",
+    seed: 12,
+  };
+  let v = run(runSetup);
+  const buyers = [];
+  for (let step = 0; step < 1800 && !v.state.gameEnded; step++) {
+    const valid = v.actions.filter((a) => a !== "Undo");
+    const next =
+      [
+        "LearnStartingSkill",
+        "FinishPreparation",
+        "PrepareExpedition",
+        "AnnounceEndOfRound",
+        "EndTurn",
+        "EndRest",
+        "SelectTactic",
+        "DeclareRest",
+        "PlayCardSideways",
+      ]
+        .map((k) =>
+          valid.find(
+            (a) => (typeof a === "string" ? a : Object.keys(a)[0]) === k,
+          ),
+        )
+        .find(Boolean) || valid[0];
+    if (next.LearnStartingSkill) buyers.push(v.player);
+    if (!next) throw Error("Lost Relic cooperative stalled");
+    v = run({ action: next, epoch: v.epoch });
+  }
+  if (
+    buyers.join() !== Array.from({ length: seats }, (_, i) => i).join() ||
+    v.state.round !== 2 ||
+    v.score?.player_results[0]?.outcome !== "defeat" ||
+    v.relic.goal !== seats + 1
+  )
+    throw Error("Lost Relic cooperative setup or scoring");
+  console.log(
+    "PASS cooperative Lost Relic",
+    seats,
+    "seats, drafts, final round and team score",
+  );
+}

@@ -137,6 +137,7 @@ function setup() {
             "mines_liberation",
             "druid_nights",
             "dungeon_lords",
+            "lost_relic_cooperative",
             ...(n <= 3 ? ["full_cooperation", "blitz_cooperation"] : []),
           ].map((s) => [s + "_" + n + "p", name(s)])
     )
@@ -368,7 +369,10 @@ function render() {
       "<p>" +
       (game.relic.influence != null
         ? game.relic.influence + " influence available for preparation"
-        : "Relic pieces recovered · " + game.relic.collected + " / 2") +
+        : "Relic pieces recovered · " +
+          game.relic.collected +
+          " / " +
+          game.relic.goal) +
       "</p>";
   if (s.gameEnded && game.score)
     panel.innerHTML +=

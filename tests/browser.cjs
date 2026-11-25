@@ -70,6 +70,25 @@ const { webkit, devices } = require("playwright");
   console.log(
     "PASS mobile WebKit: tactic, deed play, reload, expansion table, tile placement, end turn, persisted table and offline reload",
   );
+  await page.getByText("Expeditions", { exact: true }).click();
+  await page.locator("#scenario").selectOption("lost_relic_solo");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByText("Begin expedition").click();
+  await page
+    .getByRole("button", { name: /^Learn / })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: / · free$/ })
+    .first()
+    .click();
+  await page.getByRole("button", { name: /Finish preparation/i }).click();
+  await page.getByRole("button", { name: "Early bird", exact: true }).click();
+  await page
+    .getByText(/Relic pieces recovered/)
+    .first()
+    .waitFor();
+  console.log("PASS offline Lost Relic draft, tactic and objective");
   await browser.close();
 })().catch((e) => {
   console.error(e);

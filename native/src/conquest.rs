@@ -78,6 +78,24 @@ pub fn city_level(state: &GameState, action: &LegalAction) -> Option<u32> {
     )
 }
 
+pub fn team_categories(
+    result: &mk_types::scoring::FinalScoreResult,
+) -> std::collections::BTreeMap<mk_types::scoring::AchievementCategory, i32> {
+    let mut categories = std::collections::BTreeMap::new();
+    for r in &result.player_results {
+        if let Some(a) = &r.achievements {
+            for c in &a.category_scores {
+                let n = categories.entry(c.category).or_insert(c.base_points);
+                if c.base_points < 0 {
+                    *n = (*n).min(c.base_points)
+                } else if *n >= 0 {
+                    *n = (*n).max(c.base_points)
+                }
+            }
+        }
+    }
+    categories
+}
 pub fn score(state: &GameState) -> Value {
     let Some(result) = state.final_score_result.as_ref() else {
         return Value::Null;
@@ -106,19 +124,7 @@ pub fn score(state: &GameState) -> Value {
     };
     let completed = if won { 15 } else { 0 };
     if cooperative(state) {
-        let mut categories = std::collections::BTreeMap::new();
-        for r in &result.player_results {
-            if let Some(a) = &r.achievements {
-                for c in &a.category_scores {
-                    let n = categories.entry(c.category).or_insert(c.base_points);
-                    if c.base_points < 0 {
-                        *n = (*n).min(c.base_points)
-                    } else if *n >= 0 {
-                        *n = (*n).max(c.base_points)
-                    }
-                }
-            }
-        }
+        let categories = team_categories(result);
         let all_led = state.players.iter().all(|p| {
             state
                 .map
@@ -168,7 +174,6 @@ pub fn cooperative(state: &GameState) -> bool {
 }
 
 pub fn cooperation(seed: u32, heroes: &[Hero], id: &str) -> Result<GameState, String> {
-    use mk_engine::dummy_player;
     use mk_types::enums::{DummyTacticOrder, MapShape, TacticRemovalMode};
     let n = heroes.len();
     if !(2..=3).contains(&n) {
@@ -197,6 +202,11 @@ pub fn cooperation(seed: u32, heroes: &[Hero], id: &str) -> Result<GameState, St
     c.tactic_removal_mode = TacticRemovalMode::VoteOne;
     c.scoring_config = scenarios::first_reconnaissance().scoring_config;
     let mut state = mk_engine::setup::create_multiplayer_game(seed, heroes, c, id);
+    add_dummy(&mut state, heroes);
+    Ok(state)
+}
+pub fn add_dummy(state: &mut GameState, heroes: &[Hero]) {
+    use mk_engine::dummy_player;
     let dummy = dummy_player::select_dummy_hero(heroes, &mut state.rng);
     state.dummy_player = Some(dummy_player::create_dummy_player(dummy, &mut state.rng));
     state.turn_order.push(dummy_player::DUMMY_PLAYER_ID.into());
@@ -210,8 +220,7 @@ pub fn cooperation(seed: u32, heroes: &[Hero], id: &str) -> Result<GameState, St
     });
     state.rng.shuffle(spells);
     state.offers.spells = spells.drain(..3).collect();
-    prepare_tactics(&mut state);
-    Ok(state)
+    prepare_tactics(state);
 }
 pub fn prepare_tactics(s: &mut GameState) {
     s.available_tactics

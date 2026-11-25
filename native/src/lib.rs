@@ -51,8 +51,8 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         }
         let mut state = if id == "solo_conquest" && heroes.len() == 1 {
             conquest::solo(seed, heroes[0])
-        } else if id == "lost_relic_solo" && heroes.len() == 1 {
-            relic::setup(seed, heroes[0])
+        } else if id.starts_with("lost_relic_") {
+            relic::setup(seed, &heroes, id)?
         } else if id.starts_with("one_to_return_") {
             portal::setup(seed, &heroes, id)?
         } else if id.starts_with("dungeon_lords_") {
@@ -130,6 +130,9 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     }
     let (s, undo) = slot.as_mut().ok_or("Start a game")?;
     let current = |s: &GameState| {
+        if let Some(i) = relic::chooser(s) {
+            return i;
+        }
         let id = s
             .current_tactic_selector
             .as_ref()
@@ -243,6 +246,9 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
                     mines::reveal(s)
                 }
                 mines::after(s, s.round > round);
+            }
+            if relic::active(s) && s.players.len() > 1 && s.round > round && !s.game_ended {
+                conquest::prepare_tactics(s);
             }
             if conquest::cooperative(s) && s.round > round && !s.game_ended {
                 conquest::prepare_tactics(s);
