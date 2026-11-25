@@ -553,7 +553,8 @@ try {
     for (const action of journal.steps)
       game = command({ action, epoch: game.epoch });
     notice = "Expedition restored";
-    render();
+    if (new URLSearchParams(location.search).get("screen") === "expeditions") setup();
+    else render();
   } else setup();
 } catch (error) {
   app.textContent = "Could not open this expedition. " + error.message;

@@ -1,4 +1,4 @@
-const cacheName = "mage-knight-atlas-10";
+const cacheName = "mage-knight-atlas-11";
 const files = [
   "./",
   "./index.html",
@@ -24,14 +24,19 @@ self.addEventListener("install", (event) =>
   event.waitUntil(
     (async () => {
       const cache = await caches.open(cacheName);
-      await cache.addAll(files);
+      await cache.addAll(files.map(path => new Request(path, {cache: "reload"})));
       const paths = [
         ...new Set(
           Object.values(await (await cache.match("./faces.json")).json()),
         ),
       ];
-      for (let i = 0; i < paths.length; i += 12)
-        await cache.addAll(paths.slice(i, i + 12));
+      for (let i = 0; i < paths.length; i += 12) {
+        await Promise.all(paths.slice(i, i + 12).map(async path => {
+          const existing = await caches.match(path);
+          if (existing) await cache.put(path, existing);
+          else await cache.add(path);
+        }));
+      }
     })(),
   ),
 );
@@ -55,7 +60,11 @@ self.addEventListener("fetch", (event) => {
       caches
         .open(cacheName)
         .then(
-          async (c) => (await c.match(event.request)) || fetch(event.request),
+          async (c) => (await c.match(event.request, {ignoreSearch: event.request.mode === "navigate"})) || fetch(event.request),
         ),
     );
+});
+
+self.addEventListener("message", event => {
+  if (event.data === "activate-update") event.waitUntil(self.skipWaiting());
 });

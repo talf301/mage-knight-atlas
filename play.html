@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#152b29">
+<title>Open Mage Knight</title>
+<style>body{margin:10vh auto;padding:0 1.5rem;max-width:32rem;background:#152b29;color:#faf5e8;font:18px/1.5 system-ui}a,button{color:#152b29;background:#f6e0a8;border:0;border-radius:.4rem;padding:.6rem .9rem;font:inherit}a{display:inline-block}</style>
+<h1>Mage Knight</h1>
+<p id="status" role="status">Opening the guided expeditions…</p>
+<button id="retry" hidden>Try again</button>
+<a href="./web/?screen=expeditions">Open game</a>
+<script>
+const target = new URL("./web/?screen=expeditions", location.href);
+async function openGame() {
+  const retry = document.querySelector("#retry");
+  const status = document.querySelector("#status");
+  retry.hidden = true;
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration(target);
+    if (registration) {
+      status.textContent = "Checking for the latest game…";
+      await registration.update();
+      const worker = registration.installing || registration.waiting;
+      if (worker) {
+        status.textContent = "Updating the offline game and artwork. Keep this page open.";
+        await new Promise((resolve, reject) => {
+          function changed() {
+            if (worker.state === "installed") worker.postMessage("activate-update");
+            if (worker.state === "activated" || worker.state === "redundant") {
+              worker.removeEventListener("statechange", changed);
+              if (worker.state === "activated") resolve();
+              else reject(new Error("The update did not finish."));
+            }
+          }
+          worker.addEventListener("statechange", changed);
+          changed();
+        });
+      }
+    }
+    location.replace(target);
+  } catch {
+    status.textContent = "The update could not finish. Connect to the internet and try again, or open your saved game.";
+    retry.hidden = false;
+  }
+}
+document.querySelector("#retry").onclick = openGame;
+openGame();
+</script>
+</html>
