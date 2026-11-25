@@ -304,3 +304,7 @@ textarea {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+header button {
+  font: 15px system-ui;
+}

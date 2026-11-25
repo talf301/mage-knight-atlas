@@ -30,11 +30,15 @@ fn run(cmd: Value) -> Result<Value, String> {
             if heroes.is_empty() || heroes.len()>4 {return Err("Choose one to four heroes".into())}
             let seed=cmd["seed"].as_u64().ok_or("Missing seed")? as u32;
             let id=cmd["scenario"].as_str().ok_or("Missing scenario")?;
-            let state=if id=="solo" && heroes.len()==1 {create_solo_game(seed,heroes[0])} else {
+            let mut state=if id=="solo" && heroes.len()==1 {create_solo_game(seed,heroes[0])} else {
                 if heroes.len()<2 {return Err("This scenario requires multiple seats".into())}
                 let config=mk_data::scenarios::get_scenario(id).ok_or("Unknown scenario")?;
                 create_multiplayer_game(seed,&heroes,config,id)
             };
+            // Old journals replay against their original single-tile setup.
+            if cmd["setupVersion"].as_u64() == Some(2) {
+                mk_engine::setup::place_initial_tiles(&mut state);
+            }
             *slot=Some((state,UndoStack::new()));
         }
         let (s,undo)=slot.as_mut().ok_or("Start a game")?;

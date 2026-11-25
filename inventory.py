@@ -63,4 +63,8 @@ for guid,label in [('722590','Starting tile A'),('5d0bac','Starting tile B'),('8
 if '835c91' in piles['City Terrain Tiles']:
     piles['City Terrain Tiles'].remove('835c91')
     piles['Volkare (Components)'].append('835c91')
+for guid,item in items.items():
+    for face in item['faces'][:]:
+        if face in items and guid not in items[face]['faces']:
+            items[face]['faces'].append(guid)
 Path(sys.argv[2]).write_text(json.dumps({'items':items,'piles':piles},separators=(',',':')))
