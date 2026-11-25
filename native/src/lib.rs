@@ -3,6 +3,7 @@ mod druid;
 mod dungeons;
 mod mines;
 mod portal;
+mod relic;
 use mk_engine::{
     action_pipeline::apply_legal_action,
     client_state::to_client_state,
@@ -50,6 +51,8 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         }
         let mut state = if id == "solo_conquest" && heroes.len() == 1 {
             conquest::solo(seed, heroes[0])
+        } else if id == "lost_relic_solo" && heroes.len() == 1 {
+            relic::setup(seed, heroes[0])
         } else if id.starts_with("one_to_return_") {
             portal::setup(seed, &heroes, id)?
         } else if id.starts_with("dungeon_lords_") {
@@ -102,7 +105,10 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         if mines::active(&state) {
             mines::deck(&mut state)
         }
-        if version >= 2 {
+        if relic::active(&state) {
+            relic::draft(&mut state);
+        }
+        if version >= 2 && !relic::active(&state) {
             let shape = state.scenario_config.map_shape;
             if version >= 3 && shape != mk_types::enums::MapShape::Wedge {
                 state.scenario_config.map_shape = mk_types::enums::MapShape::Open3;
@@ -141,7 +147,9 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
             return Err("Turn has changed".into());
         }
         let pending = RETIRE.with_borrow(|v| v.clone());
-        if !pending.is_empty() {
+        if !relic::offers(s).is_empty() {
+            relic::purchase(s, a, undo)?;
+        } else if !pending.is_empty() {
             let choice = a
                 .get("RetireTactic")
                 .and_then(|v| v["tactic_id"].as_str())
@@ -185,10 +193,28 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
                 s.scenario_config.default_city_level = level;
             }
             let assault = conquest::ending_assault(s, &action);
+            let origin = s.players[i].position;
+            let relic_battle = if relic::active(s) {
+                relic::ending(s, &action)
+            } else {
+                None
+            };
             let battle_hex = s.combat.as_ref().and_then(|c| c.combat_hex_coord);
             let result = apply_legal_action(s, undo, i, &action, epoch);
             s.scenario_config.default_city_level = old_level;
             events = result.map_err(|e| format!("{e:?}"))?.events;
+            if relic::active(s) {
+                if s.map.tiles.len() > tile_count {
+                    relic::reveal(s, tile_count, i)
+                }
+                if let mk_types::legal_action::LegalAction::Move { target, .. } = action {
+                    relic::enter(s, i, target, origin)?;
+                }
+                if let Some(battle) = relic_battle {
+                    relic::finish(s, i, battle);
+                }
+                relic::uncover_adjacent(s);
+            }
             if portal::active(s) && round == 1 && s.round == 2 {
                 portal::close(s);
             }
@@ -266,7 +292,13 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     if mines::may_fight(s, i) {
         actions.as_array_mut().unwrap().push(json!("LiberateMine"));
     }
-    let mut score = if portal::active(s) {
+    let starting = relic::offers(s);
+    if !starting.is_empty() {
+        actions = json!(starting);
+    }
+    let mut score = if relic::active(s) {
+        relic::score(s)
+    } else if portal::active(s) {
         portal::outcome(s)
     } else {
         conquest::score(s)
@@ -278,7 +310,7 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         score = mines::score(s, score)
     }
     Ok(
-        json!({"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"events":events}),
+        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"events":events}),
     )
 }
 #[no_mangle]

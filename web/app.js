@@ -53,6 +53,14 @@ const label = (a, p) => {
   const [k, v] = pair(a);
   if (k === "ResolveChoice" && p.pending?.options?.[v.choice_index])
     return p.pending.options[v.choice_index];
+  if (k === "LearnStartingSkill") return "Learn " + name(v.skill);
+  if (k === "PrepareExpedition")
+    return (
+      name(v.item === "supply" ? v.crystal + " crystal" : v.item) +
+      " · " +
+      (v.influence ? v.influence + " influence" : "free") +
+      (v.crystal && v.kind !== "crystal" ? " + " + v.crystal + " crystal" : "")
+    );
   if (k === "SelectTactic") return name(v.tactic_id);
   if (k.startsWith("PlayCard"))
     return (
@@ -120,10 +128,17 @@ function setup() {
         ? [
             ["solo", "First Reconnaissance"],
             ["solo_conquest", "Solo Conquest"],
+            ["lost_relic_solo", "The Lost Relic"],
           ]
-        : ["first_reconnaissance", "full_conquest", "blitz_conquest", "mines_liberation", "druid_nights", "dungeon_lords", ...(n<=3?["full_cooperation","blitz_cooperation"]:[])].map(
-            (s) => [s + "_" + n + "p", name(s)],
-          )
+        : [
+            "first_reconnaissance",
+            "full_conquest",
+            "blitz_conquest",
+            "mines_liberation",
+            "druid_nights",
+            "dungeon_lords",
+            ...(n <= 3 ? ["full_cooperation", "blitz_cooperation"] : []),
+          ].map((s) => [s + "_" + n + "p", name(s)])
     )
       .map(([k, t]) => '<option value="' + k + '">' + t + "</option>")
       .join("");
@@ -239,7 +254,11 @@ function map(s, p) {
           (terrain[h.terrain] || "#767957") +
           '" fill-opacity="0.20" points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10"/><text y="-1">' +
           (here ? "★ " : h.enemies.length ? "⚔ " : "") +
-          esc(name(h.site?.siteType || h.terrain).slice(0, 10)) +
+          esc(
+            game.relic?.ruins.includes(key)
+              ? "Ruined city"
+              : name(h.site?.siteType || h.terrain).slice(0, 10),
+          ) +
           '</text><text y="7">' +
           key +
           "</text></g>"
@@ -280,7 +299,9 @@ function orders(filter) {
                           ]
                       ).indexOf(a.SelectTactic.tactic_id)),
                 )
-              : "") + button("act-" + i, label(a, p))
+              : picture(
+                  a.PrepareExpedition?.item || a.LearnStartingSkill?.skill,
+                )) + button("act-" + i, label(a, p))
           : "",
       )
       .join("") +
@@ -342,6 +363,13 @@ function render() {
       s.players
         .map((h) => "<p>" + name(h.hero) + " · " + h.fame + " fame</p>")
         .join("");
+  if (game.relic)
+    panel.innerHTML +=
+      "<p>" +
+      (game.relic.influence != null
+        ? game.relic.influence + " influence available for preparation"
+        : "Relic pieces recovered · " + game.relic.collected + " / 2") +
+      "</p>";
   if (s.gameEnded && game.score)
     panel.innerHTML +=
       "<h3>Final scoring</h3>" +
@@ -350,7 +378,8 @@ function render() {
     panel.innerHTML +=
       "<h2>" +
       esc(
-        p.pending?.label ||
+        (game.relic?.influence != null ? "Prepare your expedition" : "") ||
+          p.pending?.label ||
           (s.combat
             ? name(s.combat.phase)
             : s.roundPhase === "tactics_selection"
