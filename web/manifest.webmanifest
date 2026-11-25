@@ -1,0 +1,17 @@
+{
+  "name": "Mage Knight Campaign Atlas",
+  "short_name": "Mage Knight",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#152b29",
+  "background_color": "#f5f0df",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
