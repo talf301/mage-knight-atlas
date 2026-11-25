@@ -144,6 +144,8 @@ pub fn score(state: &GameState) -> Value {
             + cards
             + bonus
             + if all_led { 10 } else { 0 };
+        value["rankings"] = json!([]);
+        value["is_tied"] = json!(false);
         value["player_results"] = json!([{"team_score":team,"outcome":if won{"victory"}else{"defeat"},"cities":cities,"all_heroes_led":all_led,"achievement_points":categories,"unused_rounds":rounds,"dummy_cards":cards}]);
         return value;
     }
@@ -358,6 +360,47 @@ fn city_leader(shields: &[mk_types::ids::PlayerId]) -> Option<&mk_types::ids::Pl
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cooperation_uses_one_team_score_and_reserves_a_dummy_tactic() {
+        use mk_engine::{legal_actions::enumerate_legal_actions_with_undo, undo::UndoStack};
+        let mut s = cooperation(90, &[Hero::Krang, Hero::Tovak], "full_cooperation_2p").unwrap();
+        let reserved = s.dummy_player_tactic.as_ref().unwrap();
+        let chooser = s
+            .players
+            .iter()
+            .position(|p| Some(&p.id) == s.current_tactic_selector.as_ref())
+            .unwrap();
+        let actions = enumerate_legal_actions_with_undo(&s, chooser, &UndoStack::new());
+        assert_eq!(s.available_tactics.len(), 5);
+        assert!(!s.available_tactics.contains(reserved));
+        assert_eq!(
+            actions
+                .actions
+                .iter()
+                .filter(|a| matches!(a, LegalAction::SelectTactic { .. }))
+                .count(),
+            5
+        );
+        s.players[0].fame = 12;
+        s.players[1].fame = 8;
+        s.players[0].crystals.red = 3;
+        s.players[0].crystals.blue = 1;
+        s.players[1]
+            .deck
+            .extend([mk_types::ids::CardId::from("wound"), "wound".into()]);
+        s.round = 6;
+        s.end_of_round_announced_by = Some(s.players[0].id.clone());
+        s.final_score_result = Some(mk_engine::scoring::calculate_final_scores(&s));
+        let scored = score(&s);
+        let team = &scored["player_results"][0];
+        assert_eq!(team["achievement_points"]["greatest_loot"], 2);
+        assert_eq!(team["achievement_points"]["greatest_beating"], -4);
+        assert_eq!(
+            team["team_score"],
+            8 + 2 - 4 + s.dummy_player.as_ref().unwrap().deck.len() as i32
+        );
+        assert_eq!(scored["rankings"], json!([]));
+    }
     #[test]
     fn city_leadership_follows_majority_then_first_shield() {
         let a: mk_types::ids::PlayerId = "a".into();

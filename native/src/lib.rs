@@ -2,6 +2,7 @@ mod conquest;
 mod druid;
 mod dungeons;
 mod mines;
+mod portal;
 use mk_engine::{
     action_pipeline::apply_legal_action,
     client_state::to_client_state,
@@ -49,6 +50,8 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         }
         let mut state = if id == "solo_conquest" && heroes.len() == 1 {
             conquest::solo(seed, heroes[0])
+        } else if id.starts_with("one_to_return_") {
+            portal::setup(seed, &heroes, id)?
         } else if id.starts_with("dungeon_lords_") {
             let mut s = mines::setup(
                 seed,
@@ -186,6 +189,9 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
             let result = apply_legal_action(s, undo, i, &action, epoch);
             s.scenario_config.default_city_level = old_level;
             events = result.map_err(|e| format!("{e:?}"))?.events;
+            if portal::active(s) && round == 1 && s.round == 2 {
+                portal::close(s);
+            }
             if let Some(assault) = assault {
                 conquest::finish_assault(s, i, assault)
             }
@@ -260,7 +266,11 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     if mines::may_fight(s, i) {
         actions.as_array_mut().unwrap().push(json!("LiberateMine"));
     }
-    let mut score = conquest::score(s);
+    let mut score = if portal::active(s) {
+        portal::outcome(s)
+    } else {
+        conquest::score(s)
+    };
     if dungeons::active(s) && !score.is_null() {
         score = dungeons::score(s, score)
     }
