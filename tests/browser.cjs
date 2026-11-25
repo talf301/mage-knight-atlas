@@ -1,3 +1,4 @@
+const assert = require("node:assert/strict");
 const { webkit, devices } = require("playwright");
 (async () => {
   const browser = await webkit.launch();
@@ -7,6 +8,19 @@ const { webkit, devices } = require("playwright");
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(process.argv[2]);
   await page.getByText("Begin expedition").click();
+  await page
+    .locator("#step")
+    .getByText(/Choose your day tactic/)
+    .click();
+  const tops = await page
+    .locator("nav button")
+    .evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().top));
+  assert.equal(new Set(tops).size, 1);
+  const lake = page.locator('.map [aria-label^="lake "]').first();
+  await lake.click();
+  await page.getByRole("img", { name: "Selected lake hex" }).waitFor();
+  assert.equal(await page.locator("dialog .hex-preview image").count(), 1);
+  await page.locator("#close").click();
   const preview = page.getByRole("button", {
     name: "Inspect Early bird artwork",
   });
@@ -15,13 +29,40 @@ const { webkit, devices } = require("playwright");
   await page.locator("#close").click();
   await page.getByText("Show hex labels", { exact: true }).click();
   await page.getByText("Hide hex labels", { exact: true }).click();
-  await page.getByRole("button", { name: "Early bird", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Take Early bird", exact: true })
+    .click();
   await page.getByRole("button", { name: "Company", exact: true }).click();
-  await page.locator("[data-offer]").first().click();
+  const offer = page.locator('[data-group="advancedActions"]').first();
+  assert.match(await offer.innerText(), /Inspect only/);
+  assert.ok(await offer.locator(".offer-summary").innerText());
+  await offer.click();
+  await page.getByText(/conquered green city/).waitFor();
   await page.locator("dialog mk-picture.inspect").waitFor({ state: "visible" });
   await page.locator("#close").click();
   await page.getByRole("button", { name: "Hand", exact: true }).click();
   await page.locator(".card").first().click();
+  const sideways = page
+    .locator("dialog button")
+    .filter({ hasText: /Play sideways/ })
+    .first();
+  assert.ok(
+    await sideways.evaluate((b) => {
+      const r = b.getBoundingClientRect(),
+        sheet = document
+          .querySelector("dialog article")
+          .getBoundingClientRect();
+      return (
+        r.top >= sheet.top &&
+        r.bottom <= sheet.bottom &&
+        r.bottom <= innerHeight
+      );
+    }),
+    "Sideways is visible when the inspector opens",
+  );
+  const zoom = page.getByRole("button", { name: "Enlarge card artwork" });
+  await zoom.click();
+  await page.getByRole("button", { name: "Reduce card artwork" }).click();
   await page.locator("dialog [data-action^=act]").first().click();
   await page.reload();
   await page.getByText("Expedition restored").waitFor();
@@ -95,7 +136,9 @@ const { webkit, devices } = require("playwright");
     .first()
     .click();
   await page.getByRole("button", { name: /Finish preparation/i }).click();
-  await page.getByRole("button", { name: "Early bird", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Take Early bird", exact: true })
+    .click();
   await page
     .getByText(/Relic pieces recovered/)
     .first()

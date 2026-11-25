@@ -45,6 +45,16 @@ const describe = (v) =>
         : name(v);
 function effect(v, summary) {
   if (!v) return "";
+  if (
+    v.options?.length &&
+    v.options.every((x) => x.type === "gain_crystal" && x.color)
+  )
+    return (
+      "Gain one crystal · " +
+      new Intl.ListFormat("en", { type: "disjunction" }).format(
+        v.options.map((x) => x.color),
+      )
+    );
   if (v.options)
     return "Choose " + v.options.map((x) => effect(x)).join(" or ");
   if (v.effects) return v.effects.map((x) => effect(x)).join(" and ");
@@ -53,6 +63,8 @@ function effect(v, summary) {
   const combat =
     v.combatType && v.combatType !== "melee" ? name(v.combatType) + " " : "";
   switch (v.type) {
+    case "convert_mana_to_crystal":
+      return "Spend one basic mana to gain a crystal of that color.";
     case "gain_move":
       return "Move " + v.amount;
     case "gain_influence":
@@ -397,6 +409,12 @@ const button = (id, text, cls = "") =>
   "</button>";
 function modal(html) {
   article.innerHTML = html;
+  const heading = article.querySelector("h2");
+  document.querySelector("#sheet-title").textContent =
+    heading?.textContent || "Expedition";
+  heading?.remove();
+  article.scrollTop = 0;
+  dialog.classList.remove("zoomed");
   if (!dialog.open) dialog.showModal();
 }
 document.querySelector("#close").onclick = () => dialog.close();
@@ -595,6 +613,140 @@ function map(s, p) {
     "</svg>"
   );
 }
+function phasePrompt(s, p) {
+  if (s.gameEnded) return "View expedition results";
+  if (game.relic?.influence != null) return "Prepare your expedition";
+  if (p.pending?.label) return p.pending.label;
+  if (game.actions.some((a) => pair(a)[0] === "RetireTactic"))
+    return "Retire a tactic";
+  if (s.roundPhase === "tactics_selection")
+    return "Choose your " + s.timeOfDay + " tactic";
+  if (s.combat) return "Combat · " + name(s.combat.phase);
+  return "Choose a field order";
+}
+const acquisitions = new Set([
+  "BuySpell",
+  "RecruitUnit",
+  "BuyCityAdvancedAction",
+  "LearnAdvancedAction",
+  "SelectReward",
+  "SelectArtifact",
+  "ChooseLevelUpAdvancedAction",
+  "PrepareExpedition",
+  "DisbandUnitForReward",
+]);
+function offerMatch(id, k, v) {
+  if (k === "ChooseLevelUpSkill" && v.from_common_pool)
+    return (
+      game.state.players[game.player].pending?.levelUpData?.commonPoolSkills?.[
+        v.skill_index
+      ] === id
+    );
+  return (
+    acquisitions.has(k) &&
+    [
+      v.unit_id,
+      v.card_id,
+      v.advanced_action_id,
+      v.item,
+      v.reward_unit_id,
+    ].includes(id)
+  );
+}
+function offerInfo(id, group) {
+  const s = game.state,
+    p = s.players[game.player],
+    unit = game.offeredUnits?.[id],
+    c = game.cards[id];
+  const available = game.actions.some((a) => offerMatch(id, ...pair(a)));
+  const summary = unit
+    ? [unit.ability, "Base cost " + unit.cost + " Influence"]
+        .filter(Boolean)
+        .join(" · ")
+    : effect(c?.basic, c?.basicText);
+  let reason = "Can’t be taken right now.";
+  const position = p.position && s.map.hexes[p.position.q + "," + p.position.r];
+  const location = name(
+    position?.site?.siteType || position?.terrain || "unknown",
+  );
+  if (s.gameEnded) reason = "The expedition has ended.";
+  else if (
+    s.roundPhase === "tactics_selection" &&
+    game.relic?.influence == null
+  )
+    reason = phasePrompt(s, p) + " before taking offers.";
+  else if (s.combat) reason = "Resolve combat before taking this offer.";
+  else if (p.pending) reason = "Finish the current choice in Orders first.";
+  else if (unit)
+    reason =
+      "Recruit at " +
+      unit.sites.map(name).join(" / ") +
+      " (here: " +
+      location +
+      ")" +
+      ". Base cost " +
+      unit.cost +
+      " Influence. You have " +
+      p.influencePoints +
+      " Influence before modifiers.";
+  else if (group === "spells")
+    reason =
+      "Buy at a conquered mage tower or blue city for 7 Influence and matching mana, or choose a spell reward.";
+  else if (group === "advancedActions")
+    reason =
+      "Choose an advanced-action reward, or buy at a conquered green city for 6 Influence.";
+  else if (group === "monasteryAdvancedActions")
+    reason = "Learn at a monastery for 6 Influence.";
+  if (
+    !available &&
+    !p.pending &&
+    !s.combat &&
+    !s.gameEnded &&
+    !unit &&
+    s.roundPhase !== "tactics_selection" &&
+    ["advancedActions", "spells"].includes(group)
+  )
+    reason +=
+      " Here: " + location + ". Current Influence: " + p.influencePoints + ".";
+  return {
+    available,
+    summary,
+    reason,
+    label: unit ? "Level " + unit.level + " unit" : c?.color || name(group),
+  };
+}
+function hexPreview(h) {
+  const tile = game.state.map.tiles.find((t) => t.tileId === h.tileId);
+  const url = faceURL(pieceId(h.tileId));
+  const dx = tile ? h.coord.q - tile.centerCoord.q : 0,
+    dy = tile ? h.coord.r - tile.centerCoord.r : 0;
+  const x = 34.64 * (dx + dy / 2),
+    y = 30 * dy;
+  const path = "0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10";
+  return (
+    '<svg class="hex-preview" role="img" aria-label="Selected ' +
+    esc(h.terrain) +
+    ' hex" viewBox="-20 -22 40 44"><defs><clipPath id="selected-hex"><polygon points="' +
+    path +
+    '"/></clipPath></defs><polygon fill="' +
+    (terrain[h.terrain] || "#777") +
+    '" points="' +
+    path +
+    '"/>' +
+    (tile && url
+      ? '<image clip-path="url(#selected-hex)" href="' +
+        esc(url) +
+        '" x="' +
+        (-51.96 - x) +
+        '" y="' +
+        (-50 - y) +
+        '" width="103.92" height="100" preserveAspectRatio="none"/>'
+      : "") +
+    '<polygon fill="none" stroke="#c48d2c" stroke-width="1" points="' +
+    path +
+    '"/></svg>'
+  );
+}
 function orders(filter) {
   const p = game.state.players[game.player];
   return (
@@ -604,13 +756,15 @@ function orders(filter) {
         if (!filter(...pair(a))) return "";
         const { title, detail, art } = choice(a, p),
           face = art && picture(art, "choice-face");
+        const take = pair(a)[0] === "SelectTactic";
+        const label = take ? "Take " + title : title;
         const select =
           '<button aria-label="' +
-          esc(title) +
+          esc(label) +
           '" data-action="act-' +
           i +
           '"><strong>' +
-          esc(title) +
+          esc(label) +
           "</strong>" +
           (detail
             ? '<span class="action-detail">' + esc(detail) + "</span>"
@@ -665,7 +819,14 @@ function render() {
     "</small><h1>" +
     picture(name(p.hero) + " Turn Order Token", "portrait") +
     esc(name(p.hero)) +
-    '</h1><div class="stats"><b>Fame ' +
+    '</h1><button id="step" data-action="Orders">' +
+    esc(phasePrompt(s, p)) +
+    " →</button>" +
+    '<nav aria-label="Expedition views">' +
+    ["Orders", "Hand", "Company", "Chronicle"]
+      .map((t) => button(t, t, t === tab ? "active" : ""))
+      .join("") +
+    '</nav><div class="stats"><b>Fame ' +
     p.fame +
     "</b><span>Level " +
     p.level +
@@ -680,11 +841,7 @@ function render() {
       showMapLabels ? "Hide hex labels" : "Show hex labels",
       "map-toggle",
     ) +
-    "<nav>" +
-    ["Orders", "Hand", "Company", "Chronicle"]
-      .map((t) => button(t, t, t === tab ? "active" : ""))
-      .join("") +
-    '</nav><section id="panel"></section>';
+    '<section id="panel"></section>';
   const panel = document.querySelector("#panel");
   if (s.gameEnded)
     panel.innerHTML =
@@ -802,15 +959,26 @@ function render() {
             esc(name(group)) +
             '</h3><div class="hand">' +
             ids
-              .map(
-                (id) =>
+              .map((id) => {
+                const o = offerInfo(id, group);
+                return (
                   '<button class="card" data-offer="' +
                   esc(id) +
+                  '" data-group="' +
+                  esc(group) +
                   '">' +
                   picture(id, "card-face") +
+                  "<small>" +
+                  esc(o.label) +
+                  "</small>" +
                   esc(name(id)) +
-                  "</button>",
-              )
+                  '<span class="offer-summary">' +
+                  esc(o.summary) +
+                  '</span><span class="offer-status">' +
+                  (o.available ? "Available now" : "Inspect only") +
+                  "</span></button>"
+                );
+              })
               .join("") +
             "</div>"
           );
@@ -858,37 +1026,68 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("click", (e) => {
   try {
+    const zoom = e.target.closest(".zoom-art");
+    if (zoom) {
+      const expanded = dialog.classList.toggle("zoomed");
+      zoom.setAttribute("aria-expanded", String(expanded));
+      zoom.setAttribute(
+        "aria-label",
+        expanded ? "Reduce card artwork" : "Enlarge card artwork",
+      );
+      return;
+    }
     const offer = e.target.closest("[data-offer]")?.dataset.offer;
     if (offer) {
-      const matches = (k, v) =>
-        !k.startsWith("PlayCard") &&
-        [v.card_id, v.unit_id, v.advanced_action_id, v.item].includes(offer);
-      const available = game.actions.some((a) => matches(...pair(a)));
+      const o = offerInfo(
+        offer,
+        e.target.closest("[data-offer]").dataset.group,
+      );
       modal(
         "<h2>" +
           esc(name(offer)) +
           "</h2>" +
           picture(offer, "inspect") +
-          (available
-            ? orders(matches)
-            : "<p>This offer is available to inspect. You have no legal action to take it here right now.</p>"),
+          (o.available
+            ? orders((k, v) => offerMatch(offer, k, v))
+            : "<p>" + esc(o.reason) + "</p>"),
       );
       return;
     }
     const hex = e.target.closest("[data-hex]")?.dataset.hex;
     if (hex) {
       const h = game.state.map.hexes[hex];
+      const p = game.state.players[game.player];
+      const here = p.position?.q === h.coord.q && p.position?.r === h.coord.r;
+      const matches = (k, v) =>
+        [v.target, v.hex, v.target_center].some(
+          (t) => t && t.q + "," + t.r === hex,
+        ) ||
+        (here &&
+          [
+            "BeginInteraction",
+            "EnterSite",
+            "BurnMonastery",
+            "MarkGlade",
+            "LiberateMine",
+          ].includes(k));
+      const enemies = h.enemies?.length ? info(h.enemies) : "No enemies";
       modal(
         "<h2>" +
-          name(h.terrain) +
+          esc(name(h.terrain)) +
           "</h2>" +
-          picture(h.tileId, "inspect") +
-          info({ site: h.site, enemies: h.enemies }) +
-          orders((k, v) =>
-            [v.target, v.hex, v.target_center].some(
-              (t) => t && t.q + "," + t.r === hex,
-            ),
-          ),
+          hexPreview(h) +
+          "<p>" +
+          (here ? "Your position · " : "") +
+          "Hex " +
+          esc(hex) +
+          "</p>" +
+          (h.site ? info(h.site) : "<p>No site</p>") +
+          "<p>" +
+          enemies +
+          "</p>" +
+          (game.actions.some((a) => matches(...pair(a)))
+            ? orders(matches)
+            : "<p>No action available on this hex right now.</p>"),
       );
       return;
     }
@@ -918,21 +1117,64 @@ document.addEventListener("click", (e) => {
       const i = Number(id.slice(5)),
         p = game.state.players[game.player],
         c = game.cards[p.hand[i]];
+      const matches = (k, v) => k.startsWith("PlayCard") && v.hand_index === i;
+      const modes = new Set(
+        game.actions.filter((a) => matches(...pair(a))).map((a) => pair(a)[0]),
+      );
+      const art = picture(c?.name || p.hand[i], "inspect");
+      const unavailable = (kind, title, description) =>
+        modes.has(kind)
+          ? ""
+          : "<button disabled><strong>" +
+            title +
+            '</strong><span class="action-detail">' +
+            esc(description) +
+            "</span></button>";
+      const blocked =
+        game.state.roundPhase === "tactics_selection"
+          ? phasePrompt(game.state, p) + " first."
+          : p.pending
+            ? "Finish the current choice in Orders."
+            : "Unavailable in this game state.";
+      function modeReason(powered) {
+        const description = effect(
+          powered ? c?.powered : c?.basic,
+          powered ? c?.poweredText : c?.basicText,
+        );
+        let reason = blocked;
+        if (p.hand[i] === "wound") return "Wounds have no printed play effect.";
+        if (blocked === "Unavailable in this game state.") {
+          if (
+            !game.state.combat &&
+            (powered ? c?.poweredCombat : c?.basicCombat)
+          )
+            reason = "Requires combat.";
+          else if (powered && c?.powerColor)
+            reason =
+              "Requires " + c.powerColor + " mana and a playable effect.";
+        }
+        return [description, reason].filter(Boolean).join(" · ");
+      }
       modal(
         "<h2>" +
           esc(c?.name || name(p.hand[i])) +
           "</h2>" +
-          picture(c?.name || p.hand[i], "inspect") +
-          "<p>Basic · " +
-          esc(effect(c?.basic, c?.basicText)) +
-          "</p><p>Powered · " +
-          esc(effect(c?.powered, c?.poweredText)) +
-          "</p>" +
-          orders((k, v) => k.startsWith("PlayCard") && v.hand_index === i),
+          (art
+            ? '<button class="zoom-art" aria-label="Enlarge card artwork" aria-expanded="false">' +
+              art +
+              "</button>"
+            : "") +
+          orders(matches) +
+          '<div class="actions unavailable">' +
+          unavailable("PlayCardBasic", "Play basic", modeReason(false)) +
+          unavailable("PlayCardPowered", "Play powered", modeReason(true)) +
+          unavailable("PlayCardSideways", "Play sideways", blocked) +
+          "</div>",
       );
     } else {
       tab = id;
       render();
+      document.querySelector("#panel").scrollIntoView({ block: "start" });
     }
   } catch (error) {
     modal("<p>" + esc(error.message) + "</p>");

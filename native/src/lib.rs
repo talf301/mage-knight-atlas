@@ -263,9 +263,26 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     let legal = enumerate_legal_actions_with_undo(s, i, undo);
     let view = to_client_state(s, &p.id);
     let mut cards = serde_json::Map::new();
-    for id in &p.hand {
+    for id in p.hand.iter().chain(&view.offers.advanced_actions).chain(&view.offers.spells) {
         if let Some(c) = mk_data::cards::get_card(id.as_str()) {
-            cards.insert(id.to_string(),json!({"name":c.name,"color":c.color,"basic":c.basic_effect,"powered":c.powered_effect,"basicText":c.basic_effect.describe(),"poweredText":c.powered_effect.describe()}));
+            let combat_only = |categories: &[mk_data::cards::CardCategory]| {
+                !categories.is_empty() && categories.iter().all(|category| *category == mk_data::cards::CardCategory::Combat)
+            };
+            cards.insert(id.to_string(), json!({
+                "name": c.name, "color": c.color, "basic": c.basic_effect, "powered": c.powered_effect,
+                "basicText": c.basic_effect.describe(), "poweredText": c.powered_effect.describe(),
+                "basicCombat": combat_only(c.basic_categories), "poweredCombat": combat_only(c.powered_categories),
+                "powerColor": c.powered_by.primary_color()
+            }));
+        }
+    }
+    let mut offered_units = serde_json::Map::new();
+    for id in &s.offers.units {
+        if let Some(unit) = mk_data::units::get_unit(id.as_str()) {
+            offered_units.insert(id.to_string(), json!({
+                "level":unit.level, "cost":unit.influence_cost, "sites":unit.recruit_sites,
+                "ability":unit.abilities.first().map(|slot| slot.ability.describe())
+            }));
         }
     }
     let mut unit_abilities = serde_json::Map::new();
@@ -327,7 +344,7 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         score = mines::score(s, score)
     }
     Ok(
-        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"unitAbilities":unit_abilities,"events":events}),
+        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"offeredUnits":offered_units,"unitAbilities":unit_abilities,"events":events}),
     )
 }
 #[no_mangle]

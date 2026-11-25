@@ -428,3 +428,105 @@ mk-picture.choice-face {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+#app nav {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  background: var(--paper);
+  padding: 5px 0;
+}
+#app nav button {
+  padding: 6px 1px;
+  font-size: clamp(13px, 4vw, 16px);
+}
+#panel {
+  scroll-margin-top: 58px;
+}
+#step {
+  margin-bottom: 6px;
+  color: white;
+  background: var(--ink);
+}
+.offer-summary,
+.offer-status {
+  display: block;
+  margin-top: 5px;
+}
+.offer-status {
+  font-weight: bold !important;
+}
+#detail[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  max-height: 90dvh;
+}
+#detail::backdrop {
+  background: #283832;
+}
+.sheet-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.sheet-heading h2 {
+  margin: 0;
+}
+#detail article {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px;
+}
+#detail .zoom-art {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.zoom-art mk-picture.inspect {
+  height: min(22dvh, 170px);
+}
+.zoomed .zoom-art mk-picture.inspect {
+  height: min(60dvh, 500px);
+}
+#detail .actions {
+  margin: 5px 0;
+}
+#detail .actions:empty {
+  display: none;
+}
+.unavailable button {
+  color: #524f47;
+  background: #e8e3d6;
+  cursor: default;
+}
+.hex-preview {
+  display: block;
+  width: min(50%, 160px);
+  margin: auto;
+}
+@media (max-height: 640px) {
+  .zoom-art mk-picture.inspect {
+    height: 14dvh;
+    margin: 2px auto;
+  }
+  #detail .actions > button {
+    padding: 6px 9px;
+  }
+  #detail .action-detail {
+    line-height: 1.2;
+  }
+  #detail.zoomed .zoom-art mk-picture.inspect {
+    height: 60dvh;
+  }
+}

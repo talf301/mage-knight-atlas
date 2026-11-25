@@ -19,8 +19,11 @@
       ><button id="menu">Expeditions</button>
     </header>
     <main id="app"><p>Opening the atlas…</p></main>
-    <dialog id="detail">
-      <button id="close">Close</button>
+    <dialog id="detail" aria-labelledby="sheet-title">
+      <div class="sheet-heading">
+        <h2 id="sheet-title"></h2>
+        <button id="close">Close</button>
+      </div>
       <article></article>
     </dialog>
     <footer>
