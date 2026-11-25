@@ -1,8 +1,8 @@
+import { picture, catalog, faceURL } from "./artwork.js";
 const root = document.querySelector("#table"),
   dlg = document.querySelector("dialog"),
   article = dlg.querySelector("article");
-const catalog = await (await fetch("components.json")).json(),
-  items = catalog.items;
+const items = catalog.items;
 const heroes = [
   "Arythea",
   "Tovak",
@@ -275,27 +275,7 @@ function die() {
   return colors[Math.floor(Math.random() * 6)];
 }
 function art(id) {
-  const c = items[id];
-  if (!c?.url) return "";
-  const x = c.index % c.cols,
-    y = Math.floor(c.index / c.cols);
-  return (
-    '<div role="img" aria-label="' +
-    esc(c.name) +
-    '" class="art ' +
-    (c.cols * c.rows === 1 ? "token-art" : "") +
-    '" style="background-image:url(&quot;' +
-    esc(c.url) +
-    "&quot;);background-size:" +
-    100 * c.cols +
-    "% " +
-    100 * c.rows +
-    "%;background-position:" +
-    (c.cols > 1 ? (100 * x) / (c.cols - 1) : 0) +
-    "% " +
-    (c.rows > 1 ? (100 * y) / (c.rows - 1) : 0) +
-    '%"></div>'
-  );
+  return picture(id, "inspect");
 }
 const hero = () => state.party[state.seat];
 function destinations() {
@@ -506,8 +486,9 @@ function board() {
           esc(text) +
           '">' +
           (tile
-            ? '<img src="' + esc(c.url) + '" alt="' + esc(text) + '">'
-            : esc(text)) +
+            ? '<img src="' + esc(faceURL(p.id)) + '" alt="' + esc(text) + '">'
+            : (p.hidden ? "" : picture(p.id || text + " Turn Order Token")) +
+              esc(text)) +
           "</button>"
         );
       })

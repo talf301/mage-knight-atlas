@@ -1,8 +1,15 @@
-const cacheName = "mage-knight-atlas-2";
+const cacheName = "mage-knight-atlas-4";
 const files = [
   "./",
   "./index.html",
   "./app.js",
+  "./artwork.js","./faces.json",
+  "./gems/blue.webp",
+  "./gems/red.webp",
+  "./gems/white.webp",
+  "./gems/green.webp",
+  "./gems/black.webp",
+  "./gems/gold.webp",
   "./engine.mjs",
   "./components.json",
   "./table.js",
@@ -12,9 +19,12 @@ const files = [
   "./manifest.webmanifest",
   "./icon.png",
 ];
-self.addEventListener("install", (event) =>
-  event.waitUntil(caches.open(cacheName).then((cache) => cache.addAll(files))),
-);
+self.addEventListener("install",event=>event.waitUntil((async()=>{
+ const cache=await caches.open(cacheName);
+ await cache.addAll(files);
+ const paths=[...new Set(Object.values(await (await cache.match("./faces.json")).json()))];
+ for(let i=0;i<paths.length;i+=12)await cache.addAll(paths.slice(i,i+12));
+})()));
 self.addEventListener("activate", (event) =>
   event.waitUntil(self.clients.claim()),
 );

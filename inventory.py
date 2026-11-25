@@ -9,18 +9,19 @@ heroes = {'Arythea', 'Goldyx', 'Norowas', 'Tovak', 'Krang', 'Braevalar', 'Wolfha
 allowed = {'Spells','Advanced Actions','Ruins','Keep Garrisons','Mage Tower Garrisons','Marauding Orcs','City Garrisons','Draconum','Dungeon Monsters','Regular Units','Elite Units','Artifacts','Core Terrain Tiles','City Terrain Tiles','Countryside Terrain Tiles','Shades of Tezla','Elementalist Reward Tokens','Dark Crusader Reward Tokens','Common Pieces','All Remaining Skills'}
 items = {}
 piles = {}
-def visit(o, path, ordinal):
+def visit(o, path, ordinal, parent_sheets=None):
     title = english(o.get('Nickname',''))
     children = o.get('ContainedObjects',[])
     if children:
         group = path + (' / ' if path else '') + (title or 'Deeds')
-        for i,child in enumerate(children): visit(child, group, i)
+        for i,child in enumerate(children): visit(child, group, i, o.get("CustomDeck",parent_sheets))
         return
     face = o.get('CustomImage',{}).get('ImageURL') or o.get('CustomMesh',{}).get('DiffuseURL','')
     cols=rows=1
     index=0
     if 'CardID' in o:
-        sheet=o.get('CustomDeck',{}).get(str(o['CardID']//100),{})
+        sheets={**(parent_sheets or {}),**o.get('CustomDeck',{})}
+        sheet=sheets.get(str(o['CardID']//100)) or (next(iter(sheets.values())) if len(sheets)==1 else {})
         face=sheet.get('FaceURL',face)
         cols=sheet.get('NumWidth',1)
         rows=sheet.get('NumHeight',1)

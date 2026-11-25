@@ -1,3 +1,4 @@
+import { picture, pieceId, faceURL } from "./artwork.js";
 import { engine } from "./engine.mjs";
 const app = document.querySelector("#app"),
   dialog = document.querySelector("dialog"),
@@ -116,8 +117,11 @@ function setup() {
     const n = Number(document.querySelector("#count").value);
     document.querySelector("#scenario").innerHTML = (
       n === 1
-        ? [["solo", "First Reconnaissance"]]
-        : ["first_reconnaissance", "full_conquest", "blitz_conquest"].map(
+        ? [
+            ["solo", "First Reconnaissance"],
+            ["solo_conquest", "Solo Conquest"],
+          ]
+        : ["first_reconnaissance", "full_conquest", "blitz_conquest", "mines_liberation", "druid_nights", "dungeon_lords", ...(n<=3?["full_cooperation","blitz_cooperation"]:[])].map(
             (s) => [s + "_" + n + "p", name(s)],
           )
     )
@@ -161,7 +165,7 @@ function start() {
     return modal("<p>Choose a different hero for each seat.</p>");
   if (game && !confirm("Replace the expedition saved on this device?")) return;
   const init = {
-    setupVersion: 2,
+    setupVersion: 3,
     seed: crypto.getRandomValues(new Uint32Array(1))[0],
     heroes: chosen,
     scenario: document.querySelector("#scenario").value,
@@ -198,6 +202,24 @@ function map(s, p) {
       " ",
     ) +
     '">' +
+    (s.map.tiles || [])
+      .map((t) => {
+        const face = faceURL(pieceId(t.tileId));
+        if (!face) return "";
+        const c = t.centerCoord,
+          x = 34.64 * (c.q + c.r / 2),
+          y = 30 * c.r;
+        return (
+          '<image x="' +
+          (x - 51.96) +
+          '" y="' +
+          (y - 50) +
+          '" width="103.92" height="100" preserveAspectRatio="none" href="' +
+          esc(face) +
+          '"/>'
+        );
+      })
+      .join("") +
     cells
       .map((h) => {
         const key = h.coord.q + "," + h.coord.r,
@@ -215,7 +237,7 @@ function map(s, p) {
           (here ? "here" : "") +
           '" fill="' +
           (terrain[h.terrain] || "#767957") +
-          '" points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10"/><text y="-1">' +
+          '" fill-opacity="0.20" points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10"/><text y="-1">' +
           (here ? "★ " : h.enemies.length ? "⚔ " : "") +
           esc(name(h.site?.siteType || h.terrain).slice(0, 10)) +
           '</text><text y="7">' +
@@ -233,7 +255,33 @@ function orders(filter) {
     '<div class="actions">' +
     game.actions
       .map((a, i) =>
-        filter(...pair(a)) ? button("act-" + i, label(a, p)) : "",
+        filter(...pair(a))
+          ? (a.SelectTactic
+              ? picture(
+                  (game.state.timeOfDay === "day" ? "Day" : "Night") +
+                    " Tactic " +
+                    (1 +
+                      (game.state.timeOfDay === "day"
+                        ? [
+                            "early_bird",
+                            "rethink",
+                            "mana_steal",
+                            "planning",
+                            "great_start",
+                            "the_right_moment",
+                          ]
+                        : [
+                            "from_the_dusk",
+                            "long_night",
+                            "mana_search",
+                            "midnight_meditation",
+                            "preparation",
+                            "sparing_power",
+                          ]
+                      ).indexOf(a.SelectTactic.tactic_id)),
+                )
+              : "") + button("act-" + i, label(a, p))
+          : "",
       )
       .join("") +
     "</div>"
@@ -243,7 +291,8 @@ function info(value) {
   if (value == null) return "—";
   if (Array.isArray(value))
     return value.length ? value.map(info).join("<br>") : "—";
-  if (typeof value !== "object") return esc(name(value));
+  if (typeof value !== "object")
+    return (typeof value === "string" ? picture(value) : "") + esc(name(value));
   return (
     "<dl>" +
     Object.entries(value)
@@ -269,6 +318,7 @@ function render() {
     " / " +
     s.totalRounds +
     "</small><h1>" +
+    picture(name(p.hero) + " Turn Order Token", "portrait") +
     esc(name(p.hero)) +
     '</h1><div class="stats"><b>Fame ' +
     p.fame +
@@ -315,7 +365,12 @@ function render() {
       p.healingPoints +
       "</div><p>Source · " +
       s.source.dice
-        .map((d) => name(d.color) + (d.isDepleted ? " (spent)" : ""))
+        .map(
+          (d) =>
+            picture(name(d.color) + " Mana") +
+            name(d.color) +
+            (d.isDepleted ? " (spent)" : ""),
+        )
         .join(" / ") +
       "</p>" +
       (s.combat
@@ -345,7 +400,9 @@ function render() {
               white: "#cdbf99",
               green: "#557650",
             }[c?.color] || "#866") +
-            '"><small>' +
+            '">' +
+            picture(c?.name || id, "card-face") +
+            "<small>" +
             esc(c?.color || "Wound") +
             "</small>" +
             esc(c?.name || name(id)) +
@@ -414,6 +471,7 @@ document.addEventListener("click", (e) => {
         "<h2>" +
           name(h.terrain) +
           "</h2>" +
+          picture(h.tileId, "inspect") +
           info({ site: h.site, enemies: h.enemies }) +
           orders((k, v) =>
             [v.target, v.hex, v.target_center].some(
@@ -435,7 +493,9 @@ document.addEventListener("click", (e) => {
       modal(
         "<h2>" +
           esc(c?.name || name(p.hand[i])) +
-          "</h2><p>Basic · " +
+          "</h2>" +
+          picture(c?.name || p.hand[i], "inspect") +
+          "<p>Basic · " +
           esc(effect(c?.basic)) +
           "</p><p>Powered · " +
           esc(effect(c?.powered)) +

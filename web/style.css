@@ -308,3 +308,31 @@ textarea {
 header button {
   font: 15px system-ui;
 }
+mk-picture {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  vertical-align: middle;
+}
+mk-picture.thumb {
+  width: 36px;
+  height: 40px;
+  margin-right: 5px;
+}
+mk-picture.card-face {
+  display: block !important;
+  width: 100%;
+  aspect-ratio: 0.74;
+  margin-bottom: 6px;
+}
+mk-picture.inspect {
+  display: block !important;
+  width: min(100%, 360px);
+  height: min(52vh, 430px);
+  margin: 8px auto;
+}
+mk-picture.portrait {
+  width: 56px;
+  height: 56px;
+  margin-right: 10px;
+}
