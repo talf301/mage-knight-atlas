@@ -86,6 +86,9 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         if version >= 3 {
             conquest::prepare_decks(&mut state)
         }
+        if version >= 4 {
+            conquest::printed_components(&mut state);
+        }
         if dungeons::active(&state) {
             dungeons::deck(&mut state)
         }

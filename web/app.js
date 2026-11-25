@@ -165,7 +165,7 @@ function start() {
     return modal("<p>Choose a different hero for each seat.</p>");
   if (game && !confirm("Replace the expedition saved on this device?")) return;
   const init = {
-    setupVersion: 3,
+    setupVersion: 4,
     seed: crypto.getRandomValues(new Uint32Array(1))[0],
     heroes: chosen,
     scenario: document.querySelector("#scenario").value,

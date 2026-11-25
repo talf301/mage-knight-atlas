@@ -36,6 +36,36 @@ const { webkit, devices } = require("playwright");
   await ctx.setOffline(true);
   await page.reload();
   await page.getByText("Expedition restored").waitFor();
+  const artwork = await page.evaluate(async () => {
+    const { catalog, faces, pieceId } = await import("./artwork.js");
+    const ids = Object.keys(catalog.items);
+    for (const id of ids)
+      if (!faces[id]) throw Error("Missing component face " + id);
+    for (const component of [
+      "Noble Manners",
+      "Hero (White)",
+      "Starting_A",
+      "Orc Stonethrowers",
+      "Herbalist",
+      "Gold Mana",
+    ]) {
+      if (!pieceId(component.toLowerCase().replaceAll(" ", "_")))
+        throw Error("Missing named artwork " + component);
+    }
+    const paths = [...new Set(Object.values(faces))];
+    for (let i = 0; i < paths.length; i += 16) {
+      await Promise.all(
+        paths.slice(i, i + 16).map(async (path) => {
+          const image = new Image();
+          image.src = path;
+          await image.decode();
+          if (!image.naturalWidth) throw Error("Image did not decode: " + path);
+        }),
+      );
+    }
+    return [ids.length, paths.length];
+  });
+  console.log("PASS offline catalog and decoded images", ...artwork);
   if (errors.length) throw Error(errors.join("\n"));
   console.log(
     "PASS mobile WebKit: tactic, deed play, reload, expansion table, tile placement, end turn, persisted table and offline reload",

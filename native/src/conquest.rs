@@ -219,6 +219,55 @@ pub fn prepare_tactics(s: &mut GameState) {
     }
 }
 
+// Keep the starter deck order seeded while restoring the two printed cards
+// replaced by extra hero-specific cards in the upstream digital deck lists.
+pub fn printed_components(s: &mut GameState) {
+    use mk_types::ids::CardId;
+    fn physical(card: &mut CardId) {
+        match card.as_str() {
+            "axe_throw" => *card = "concentration".into(),
+            "krang_battle_rage" => *card = "rage".into(),
+            _ => {}
+        }
+    }
+    for p in &mut s.players {
+        p.deck.iter_mut().chain(&mut p.hand).for_each(physical);
+    }
+    if let Some(dummy) = &mut s.dummy_player {
+        dummy
+            .deck
+            .iter_mut()
+            .chain(&mut dummy.discard)
+            .for_each(physical);
+    }
+    let id = s.scenario_id.as_str();
+    if id == "solo_conquest"
+        || id.starts_with("blitz_conquest_")
+        || id.starts_with("full_conquest_")
+        || cooperative(s)
+    {
+        use mk_types::enums::TileId::*;
+        let mut countries = tiles::all_countryside_tiles();
+        countries.extend([Countryside12, Countryside13, Countryside14]);
+        s.rng.shuffle(&mut countries);
+        countries.truncate(s.scenario_config.countryside_tile_count as usize);
+        let mut noncities = tiles::all_non_city_core_tiles();
+        noncities.extend([Core9, Core10]);
+        s.rng.shuffle(&mut noncities);
+        noncities.truncate(s.scenario_config.core_tile_count as usize);
+        let mut cities = tiles::all_city_core_tiles();
+        s.rng.shuffle(&mut cities);
+        noncities.extend(
+            cities
+                .into_iter()
+                .take(s.scenario_config.city_tile_count as usize),
+        );
+        s.rng.shuffle(&mut noncities);
+        s.map.tile_deck.countryside = countries;
+        s.map.tile_deck.core = noncities;
+    }
+}
+
 pub fn prepare_decks(s: &mut GameState) {
     use mk_types::enums::{MapShape, TileId};
     if s.scenario_config.map_shape != MapShape::Wedge {

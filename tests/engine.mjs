@@ -71,26 +71,59 @@ console.log(
   "PASS seven solo heroes, nine hotseat configurations, completed solo clock, final scoring",
 );
 
-for (const [scenario,seats] of [["solo_conquest",1],["full_cooperation_2p",2],["full_cooperation_3p",3],["blitz_cooperation_2p",2],["blitz_cooperation_3p",3]]){
- const init={setupVersion:3,heroes:heroes.slice(0,seats),scenario,seed:720};
- let g=run(init),retired=0;
- assert.equal(g.state.deckCounts.artifacts,25);
- assert.equal(g.state.map.tiles.length,seats===1?3:4);
- assert.throws(()=>run({epoch:g.epoch,action:{Move:{target:{q:0,r:1},cost:0}}}));
- assert.deepEqual(run({}),g);
- const replay=[];
- for(let step=0;step<3500&&!g.state.gameEnded;step++){
-   const names=['RetireTactic','AnnounceEndOfRound','EndTurn','EndRest','SelectTactic','DeclareRest','Rest','PlayCardSideways','PlayCardBasic'];
-   const choices=g.actions.filter(a=>kind(a)!=='Undo');
-   const action=names.map(n=>choices.find(a=>kind(a)===n)).find(Boolean)||choices[0];
-   assert(action,scenario+' stuck in '+g.state.roundPhase);
-   if(kind(action)==='RetireTactic')retired++;
-   replay.push(action);g=run({action,epoch:g.epoch});
- }
- assert(g.state.gameEnded,scenario+' did not end');
- assert.equal(g.state.round,scenario.startsWith('blitz')?4:6);
- assert.equal(g.score.player_results[0].outcome,'defeat');
- if(seats>1)assert.equal(retired,g.state.round-2);
- const final=g;g=run(init);for(const action of replay)g=run({action,epoch:g.epoch});assert.deepEqual(final,g);
- console.log('PASS',scenario,replay.length,'actions, replay and scoring');
+for (const [scenario, seats] of [
+  ["solo_conquest", 1],
+  ["full_cooperation_2p", 2],
+  ["full_cooperation_3p", 3],
+  ["blitz_cooperation_2p", 2],
+  ["blitz_cooperation_3p", 3],
+]) {
+  const init = {
+    setupVersion: 4,
+    heroes: heroes.slice(0, seats),
+    scenario,
+    seed: 720,
+  };
+  let g = run(init),
+    retired = 0;
+  assert.equal(g.state.deckCounts.artifacts, 25);
+  assert.equal(g.state.map.tiles.length, seats === 1 ? 3 : 4);
+  assert.throws(() =>
+    run({
+      epoch: g.epoch,
+      action: { Move: { target: { q: 0, r: 1 }, cost: 0 } },
+    }),
+  );
+  assert.deepEqual(run({}), g);
+  const replay = [];
+  for (let step = 0; step < 3500 && !g.state.gameEnded; step++) {
+    const names = [
+      "RetireTactic",
+      "AnnounceEndOfRound",
+      "EndTurn",
+      "EndRest",
+      "SelectTactic",
+      "DeclareRest",
+      "Rest",
+      "PlayCardSideways",
+      "PlayCardBasic",
+    ];
+    const choices = g.actions.filter((a) => kind(a) !== "Undo");
+    const action =
+      names.map((n) => choices.find((a) => kind(a) === n)).find(Boolean) ||
+      choices[0];
+    assert(action, scenario + " stuck in " + g.state.roundPhase);
+    if (kind(action) === "RetireTactic") retired++;
+    replay.push(action);
+    g = run({ action, epoch: g.epoch });
+  }
+  assert(g.state.gameEnded, scenario + " did not end");
+  assert.equal(g.state.round, scenario.startsWith("blitz") ? 4 : 6);
+  assert.equal(g.score.player_results[0].outcome, "defeat");
+  if (seats > 1) assert.equal(retired, g.state.round - 2);
+  const final = g;
+  g = run(init);
+  for (const action of replay) g = run({ action, epoch: g.epoch });
+  assert.deepEqual(final, g);
+  console.log("PASS", scenario, replay.length, "actions, replay and scoring");
 }

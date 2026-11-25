@@ -12,6 +12,22 @@ for (const [id, p] of Object.entries(catalog.items)) {
     byName.set(key, id);
 }
 const heroes = /^(arythea|tovak|goldyx|norowas|wolfhawk|krang|braevalar)_/;
+// Some workshop nicknames differ from the text on the scanned component.
+const printedNames = new Map(
+  Object.entries({
+    noblemanners: "Noble Promise",
+    orcstonethrowers: "Orc Stonethrower",
+    corruptedpriests: "Corrupt Priests",
+    elementalpriests: "Elemental Priestesses",
+    grimlegionnaries: "Grim Legionnaires",
+    vampiredragon: "Vampiric Dragon",
+    herbalist: "Herbalists",
+    heroblue: "88f3f2",
+    herogreen: "613dca",
+    herowhite: "8ccbdd",
+    herored: "4ee245",
+  }),
+);
 export function pieceId(name) {
   if (!name) return "";
   if (catalog.items[name]) return name;
@@ -20,6 +36,12 @@ export function pieceId(name) {
     name = (name.includes("city") ? "city" : tile[1]) + " tile " + tile[2];
   if (name === "starting_a" || name === "starting_b")
     name = "starting tile " + name.slice(-1);
+  const bare = name.replace(heroes, "");
+  const physical = printedNames.get(normalize(bare));
+  if (physical)
+    return catalog.items[physical]
+      ? physical
+      : byName.get(normalize(physical)) || "";
   return (
     byName.get(normalize(name)) ||
     byName.get(normalize(name.replace(heroes, ""))) ||
@@ -36,12 +58,14 @@ export function picture(name, size = "thumb") {
         '" aria-hidden="true"></mk-picture>'
     : "";
 }
-export const faces=await (await fetch("./faces.json")).json();
-export function faceURL(id){return faces[id]||""}
+export const faces = await (await fetch("./faces.json")).json();
+export function faceURL(id) {
+  return faces[id] || "";
+}
 class PiecePicture extends HTMLElement {
   connectedCallback() {
-    const url=faceURL(this.getAttribute("piece"));
-    if(url)this.style.backgroundImage='url("'+url+'")';
+    const url = faceURL(this.getAttribute("piece"));
+    if (url) this.style.backgroundImage = 'url("' + url + '")';
   }
 }
-customElements.define("mk-picture",PiecePicture);
+customElements.define("mk-picture", PiecePicture);
