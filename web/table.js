@@ -47,10 +47,17 @@ let state = JSON.parse(localStorage.getItem(store) || "null"),
   position = [900, 750],
   callbacks = [],
   warning = "";
-function btn(t, fn, cls = "") {
+function btn(t, fn, cls = "", face = "") {
   let i = callbacks.push(fn) - 1;
   return (
-    '<button class="' + cls + '" data-c="' + i + '">' + esc(t) + "</button>"
+    '<button class="' +
+    cls +
+    '" data-c="' +
+    i +
+    '">' +
+    face +
+    esc(t) +
+    "</button>"
   );
 }
 document.addEventListener("click", (e) => {
@@ -401,7 +408,14 @@ function pieces(z) {
   return (
     '<div class="spread">' +
     state.piles[z]
-      .map((id, i) => btn(items[id]?.name || id, () => transfer(z, i)))
+      .map((id, i) =>
+        btn(
+          items[id]?.name || id,
+          () => transfer(z, i),
+          "piece-card",
+          picture(id, "card-face"),
+        ),
+      )
       .join("") +
     "</div>"
   );

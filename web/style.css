@@ -336,3 +336,95 @@ mk-picture.portrait {
   height: 56px;
   margin-right: 10px;
 }
+
+mk-picture {
+  display: inline-block;
+}
+.actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.actions > button {
+  grid-column: 1 / -1;
+}
+.art-choice {
+  background: #fffaf0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.art-choice button {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.art-choice .inspect-choice {
+  padding: 5px;
+  background: #e6dfca;
+}
+mk-picture.choice-face {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5/7;
+}
+.action-detail {
+  display: block;
+  font: 14px/1.35 system-ui;
+  color: #445349;
+  margin-top: 3px;
+}
+.map polygon {
+  stroke: rgba(38, 48, 35, 0.22);
+  stroke-width: 0.38;
+}
+.map polygon.here {
+  stroke: #ffdc86;
+  stroke-width: 1.6;
+}
+.map .map-marker {
+  font-size: 11px;
+  stroke-width: 2px;
+}
+.map-toggle {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.board-space .tile {
+  padding: 0;
+}
+.board-space .tile,
+.tile img {
+  clip-path: polygon(
+    0 40%,
+    16.6667% 30%,
+    16.6667% 10%,
+    33.3333% 0,
+    50% 10%,
+    66.6667% 0,
+    83.3333% 10%,
+    83.3333% 30%,
+    100% 40%,
+    100% 60%,
+    83.3333% 70%,
+    83.3333% 90%,
+    66.6667% 100%,
+    50% 90%,
+    33.3333% 100%,
+    16.6667% 90%,
+    16.6667% 70%,
+    0 60%
+  );
+}
+.spread .piece-card {
+  flex: 0 1 145px;
+  width: 44%;
+  padding: 6px;
+}
+.hand {
+  grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+}
+@media (min-width: 620px) {
+  .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

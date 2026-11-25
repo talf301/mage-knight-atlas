@@ -13,6 +13,7 @@ const heroes = [
   "braevalar",
 ];
 const key = "mage-knight-atlas.v1";
+let showMapLabels = false;
 let command,
   game,
   journal,
@@ -42,34 +43,350 @@ const describe = (v) =>
             )
             .join(", ")
         : name(v);
-function effect(v) {
+function effect(v, summary) {
   if (!v) return "";
-  if (v.options) return v.options.map(effect).join(" or ");
-  if (v.effects) return v.effects.map(effect).join(" + ");
-  return name(v.type).replace(/^Gain /, "") + " " + describe(v);
+  if (v.options)
+    return "Choose " + v.options.map((x) => effect(x)).join(" or ");
+  if (v.effects) return v.effects.map((x) => effect(x)).join(" and ");
+  const element =
+    v.element && v.element !== "physical" ? name(v.element) + " " : "";
+  const combat =
+    v.combatType && v.combatType !== "melee" ? name(v.combatType) + " " : "";
+  switch (v.type) {
+    case "gain_move":
+      return "Move " + v.amount;
+    case "gain_influence":
+      return "Influence " + v.amount;
+    case "gain_attack":
+      return combat + element + "Attack " + v.amount;
+    case "gain_block":
+      return element + "Block " + v.amount;
+    case "gain_healing":
+      return "Heal " + v.amount;
+    case "draw_cards":
+      return "Draw " + v.count + (v.count === 1 ? " card" : " cards");
+    case "gain_mana":
+      return "Gain " + v.amount + " " + v.color + " mana";
+    case "gain_crystal":
+      return "Gain a " + (v.color || "basic") + " crystal";
+    case "discard_cost":
+      return (
+        "Discard " +
+        v.count +
+        (v.wounds_only
+          ? " Wound"
+          : v.filter_wounds
+            ? " non-Wound card"
+            : " card") +
+        (v.count === 1 ? "" : "s") +
+        " to use this effect. " +
+        effect(v.then_effect)
+      );
+    default:
+      return summary || "Read the printed effect on the enlarged card.";
+  }
 }
 const pair = (a) => (typeof a === "string" ? [a, {}] : Object.entries(a)[0]);
-const label = (a, p) => {
-  const [k, v] = pair(a);
-  if (k === "ResolveChoice" && p.pending?.options?.[v.choice_index])
-    return p.pending.options[v.choice_index];
-  if (k === "LearnStartingSkill") return "Learn " + name(v.skill);
-  if (k === "PrepareExpedition")
-    return (
-      name(v.item === "supply" ? v.crystal + " crystal" : v.item) +
-      " · " +
-      (v.influence ? v.influence + " influence" : "free") +
-      (v.crystal && v.kind !== "crystal" ? " + " + v.crystal + " crystal" : "")
-    );
-  if (k === "SelectTactic") return name(v.tactic_id);
-  if (k.startsWith("PlayCard"))
-    return (
-      name(k.slice(8)) +
-      (v.sideways_as ? " · " + name(v.sideways_as) : "") +
-      (v.mana_color ? " · " + name(v.mana_color) + " mana" : "")
-    );
-  return name(k) + " " + describe(v);
+const tactics = {
+  day: [
+    "early_bird",
+    "rethink",
+    "mana_steal",
+    "planning",
+    "great_start",
+    "the_right_moment",
+  ],
+  night: [
+    "from_the_dusk",
+    "long_night",
+    "mana_search",
+    "midnight_meditation",
+    "preparation",
+    "sparing_power",
+  ],
 };
+const tacticEffects = {
+  early_bird: "Act first in the day.",
+  rethink:
+    "Exchange up to three cards from your hand, including Wounds, then shuffle the discarded cards back into your deck.",
+  mana_steal:
+    "Reserve a basic-color Source die. Spend its mana on a later turn this day.",
+  planning:
+    "End a turn with at least two cards in hand to draw one above your hand limit.",
+  great_start: "Immediately draw two cards.",
+  the_right_moment:
+    "Once this day, take another turn immediately after yours, before the end of the round is announced.",
+  from_the_dusk: "Act first at night.",
+  long_night:
+    "Once this night, refill an empty deck with up to three random cards from your discard pile.",
+  mana_search:
+    "Before using Source mana, reroll up to two dice once per turn. Choose depleted gold dice first.",
+  midnight_meditation:
+    "Once before a turn this night, shuffle up to five cards from your hand into your deck and draw that many.",
+  preparation:
+    "Search your deck for one card to put in your hand, then shuffle.",
+  sparing_power:
+    "Before a turn, tuck your top deed under this tactic or flip the tactic to take all tucked cards into your hand.",
+};
+const instructions = {
+  EndTurn: "Finish this turn and refill your hand up to its current limit.",
+  Undo: "Return to the previous reversible game state.",
+  DeclareRest: "Spend the turn resting to discard Wounds from your hand.",
+  AnnounceEndOfRound:
+    "Start the end-of-round sequence. The remaining heroes get their final turns.",
+  BeginInteraction:
+    "Spend Influence at this location to recruit or purchase what it offers.",
+  EnterSite: "Enter the adventure site on your hex and resolve its encounter.",
+  EndCombatPhase: "Finish the current combat phase and advance the battle.",
+  FinishPreparation:
+    "Keep your purchases, shuffle your starting deck and deal your opening hand.",
+  BurnMonastery:
+    "Fight the monastery defender for an artifact. Burning the monastery costs reputation.",
+  LiberateMine: "Fight the guards to claim this mine.",
+  MarkGlade: "Place your shield on this glade and end your movement.",
+  PerformIncantation: "Summon one enemy for each glade you have marked.",
+  ResolveAttack: "Resolve the attack using your assigned attack points.",
+  SubsetConfirm: "Apply your current selection.",
+};
+function choice(a, p) {
+  const [k, v] = pair(a),
+    c = game.cards[v.card_id],
+    xy = (t) => t.q + ", " + t.r;
+  const text = (title, detail = "", art = "") => ({ title, detail, art });
+  const item = v.unit_id || v.advanced_action_id || v.card_id || v.skill_id;
+  const cardName = (id) => game.cards[id]?.name || name(id);
+  if (k === "SelectTactic" || k === "RetireTactic") {
+    const period = Object.keys(tactics).find((t) =>
+      tactics[t].includes(v.tactic_id),
+    );
+    const rank = period ? tactics[period].indexOf(v.tactic_id) + 1 : 0;
+    return text(
+      (k === "RetireTactic" ? "Retire " : "") + name(v.tactic_id),
+      k === "RetireTactic"
+        ? "Remove this tactic from future rounds."
+        : "Initiative " + rank + " · " + tacticEffects[v.tactic_id],
+      period ? name(period) + " Tactic " + rank : "",
+    );
+  }
+  if (k === "LearnStartingSkill")
+    return text(
+      "Learn " + name(v.skill),
+      "Keep this skill for the expedition.",
+      v.skill,
+    );
+  if (k === "PrepareExpedition") {
+    const cost =
+      (v.influence ? v.influence + " influence" : "free") +
+      (v.crystal && v.kind !== "crystal" ? " + " + v.crystal + " crystal" : "");
+    return text(
+      name(v.item === "supply" ? v.crystal + " crystal" : v.item) +
+        " · " +
+        cost,
+      "Add to your starting " +
+        ({ unit: "company", crystal: "supply" }[v.kind] || "deck") +
+        ".",
+      v.item === "supply" ? v.crystal + " Mana" : v.item,
+    );
+  }
+  if (k === "PlayCardBasic")
+    return text("Play basic effect", effect(c?.basic, c?.basicText));
+  if (k === "PlayCardPowered")
+    return text(
+      "Play powered effect" +
+        (v.mana_color ? " · " + v.mana_color + " mana" : ""),
+      effect(c?.powered, c?.poweredText),
+    );
+  if (k === "PlayCardSideways")
+    return text(
+      "Play sideways · " + name(v.sideways_as) + " 1",
+      "Use the card for one point of " +
+        name(v.sideways_as).toLowerCase() +
+        ".",
+    );
+  if (k === "RecruitUnit")
+    return text(
+      "Recruit " + name(item),
+      "Pay " +
+        v.influence_cost +
+        " Influence to add this unit to your company.",
+      item,
+    );
+  if (k === "BuySpell")
+    return text(
+      "Buy " + cardName(item),
+      "Pay 7 Influence and one " + v.mana_color + " mana.",
+      item,
+    );
+  if (k === "LearnAdvancedAction" || k === "BuyCityAdvancedAction")
+    return text(
+      "Learn " + cardName(item),
+      "Spend 6 Influence to gain this advanced action.",
+      item,
+    );
+  if (
+    k === "SelectArtifact" ||
+    k === "SelectReward" ||
+    k === "ChooseLevelUpAdvancedAction"
+  )
+    return text(
+      "Take " + cardName(item),
+      "Claim this " +
+        (k === "SelectArtifact" ? "artifact" : v.unit_id ? "unit" : "card") +
+        " as your reward.",
+      item,
+    );
+  if (k === "ChooseLevelUpSkill") {
+    const data = p.pending?.levelUpData;
+    const id = (
+      v.from_common_pool ? data?.commonPoolSkills : data?.drawnSkills
+    )?.[v.skill_index];
+    if (id)
+      return text(
+        "Learn " + name(id),
+        v.from_common_pool
+          ? "Choose from the common skills."
+          : "Choose one of your drawn skills.",
+        id,
+      );
+  }
+  if (k === "ResolveTacticDecision") {
+    const d = v.data;
+    if (d.type === "preparation") {
+      const id = p.pending?.cardIds?.[d.deck_card_index];
+      if (id)
+        return text(
+          "Take " + cardName(id),
+          "Put this card into your hand, then shuffle your deck.",
+          id,
+        );
+    }
+    if (d.type === "mana_steal") {
+      const die = game.state.source.dice[d.die_index];
+      if (die)
+        return text(
+          "Reserve " + die.color + " mana",
+          "Take this die for your tactic.",
+          die.color + " Mana",
+        );
+    }
+    if (d.type === "sparing_power_stash")
+      return text(
+        "Set aside the top deed",
+        "Keep it face down under Sparing Power.",
+      );
+    if (d.type === "sparing_power_take")
+      return text(
+        "Take the stored deeds",
+        "Flip Sparing Power and add the stored cards to your hand.",
+      );
+  }
+  if (k === "ResolveDiscardForCrystal")
+    return item
+      ? text(
+          "Discard " + cardName(item),
+          "Use this card for the crystal effect.",
+          item,
+        )
+      : text("Skip this discard");
+  if (k === "ResolveDecompose" || k === "ResolveMaximalEffect") {
+    const id = p.hand[v.hand_index];
+    if (id)
+      return text(
+        "Throw away " + cardName(id),
+        "Remove this card to resolve the effect.",
+        id,
+      );
+  }
+  if (k === "InteractSite")
+    return text(
+      "Buy " + v.healing + " Healing",
+      "Use Influence at this site to gain healing points.",
+    );
+  if (
+    k === "DeclareBlock" ||
+    k === "AssignDamageToHero" ||
+    k === "AssignDamageToUnit"
+  ) {
+    const enemies = game.state.combat?.enemies || [];
+    const enemy =
+      k === "DeclareBlock"
+        ? enemies.find((e) => e.instanceId === v.enemy_instance_id)
+        : enemies[v.enemy_index];
+    if (enemy) {
+      const unit = p.units?.find((u) => u.instanceId === v.unit_instance_id);
+      return text(
+        k === "DeclareBlock"
+          ? "Block " + enemy.name
+          : "Assign damage to " + (unit ? name(unit.unitId) : name(p.hero)),
+        enemy.name + " · attack " + (v.attack_index + 1),
+        enemy.enemyId,
+      );
+    }
+  }
+  if (k === "ActivateUnit") {
+    const unit = p.units.find((u) => u.instanceId === v.unit_instance_id);
+    const ability = game.unitAbilities?.[v.unit_instance_id]?.[v.ability_index];
+    if (unit && ability)
+      return text(
+        name(unit.unitId) + " · " + ability.effect,
+        ability.mana
+          ? "Pay one " + ability.mana + " mana to activate this ability."
+          : "Activate this unit ability.",
+        unit.unitId,
+      );
+  }
+  if (
+    k === "SubsetSelect" &&
+    ["rethink", "midnight_meditation"].includes(p.pending?.kind)
+  ) {
+    const id = p.hand[v.index];
+    if (id)
+      return text(
+        (p.pending.selected?.includes(v.index) ? "Deselect " : "Select ") +
+          cardName(id),
+        "Choose the cards to exchange, then confirm your selection.",
+        id,
+      );
+  }
+  if (k === "ResolveMeditation" && v.place_on_top == null) {
+    const id = p.pending?.cardIds?.[v.selection_index];
+    if (id)
+      return text(
+        "Select " + cardName(id),
+        "Choose this card from your discard pile.",
+        id,
+      );
+  }
+  if (k === "ResolveChoice" || k === "SubsetSelect") {
+    const opt = p.pending?.options?.[v.choice_index ?? v.index];
+    if (typeof opt === "string") return text(opt, "", pieceId(opt) ? opt : "");
+  }
+  if (k === "Move")
+    return text(
+      "Move to " +
+        name(game.state.map.hexes[v.target.q + "," + v.target.r]?.terrain) +
+        " · " +
+        xy(v.target),
+      "Spend " + v.cost + " Move.",
+    );
+  if (k === "Explore")
+    return text(
+      "Explore at " + xy(v.target_center),
+      "Reveal the next map tile here.",
+    );
+  if (k === "ChallengeRampaging")
+    return text(
+      "Challenge enemy at " + xy(v.hex),
+      "Start combat with the rampaging enemy.",
+    );
+  if (k === "UseSkill" && item)
+    return text("Use " + name(item), "Resolve the printed skill effect.", item);
+  return text(
+    name(k) + (Object.keys(v).length ? " · " + describe(v) : ""),
+    instructions[k] || "",
+    item || "",
+  );
+}
 const button = (id, text, cls = "") =>
   '<button class="' +
   cls +
@@ -218,6 +535,7 @@ function map(s, p) {
       " ",
     ) +
     '">' +
+    '<defs><clipPath id="tile-cut" clipPathUnits="objectBoundingBox"><polygon points="0,.4 .166667,.3 .166667,.1 .333333,0 .5,.1 .666667,0 .833333,.1 .833333,.3 1,.4 1,.6 .833333,.7 .833333,.9 .666667,1 .5,.9 .333333,1 .166667,.9 .166667,.7 0,.6"/></clipPath></defs>' +
     (s.map.tiles || [])
       .map((t) => {
         const face = faceURL(pieceId(t.tileId));
@@ -226,7 +544,7 @@ function map(s, p) {
           x = 34.64 * (c.q + c.r / 2),
           y = 30 * c.r;
         return (
-          '<image x="' +
+          '<image clip-path="url(#tile-cut)" x="' +
           (x - 51.96) +
           '" y="' +
           (y - 50) +
@@ -253,16 +571,24 @@ function map(s, p) {
           (here ? "here" : "") +
           '" fill="' +
           (terrain[h.terrain] || "#767957") +
-          '" fill-opacity="0.20" points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10"/><text y="-1">' +
-          (here ? "★ " : h.enemies.length ? "⚔ " : "") +
-          esc(
-            game.relic?.ruins.includes(key)
-              ? "Ruined city"
-              : name(h.site?.siteType || h.terrain).slice(0, 10),
-          ) +
-          '</text><text y="7">' +
-          key +
-          "</text></g>"
+          '" fill-opacity="' +
+          (faceURL(pieceId(h.tileId)) ? "0" : "1") +
+          '" points="0,-20 17.32,-10 17.32,10 0,20 -17.32,10 -17.32,-10"/>' +
+          (showMapLabels
+            ? '<text y="-1">' +
+              esc(
+                game.relic?.ruins.includes(key)
+                  ? "Ruined city"
+                  : name(h.site?.siteType || h.terrain),
+              ) +
+              '</text><text y="7">' +
+              key +
+              "</text>"
+            : "") +
+          (!showMapLabels && (here || h.enemies.length)
+            ? '<text class="map-marker" y="3">' + (here ? "★" : "⚔") + "</text>"
+            : "") +
+          "</g>"
         );
       })
       .join("") +
@@ -274,37 +600,34 @@ function orders(filter) {
   return (
     '<div class="actions">' +
     game.actions
-      .map((a, i) =>
-        filter(...pair(a))
-          ? (a.SelectTactic
-              ? picture(
-                  (game.state.timeOfDay === "day" ? "Day" : "Night") +
-                    " Tactic " +
-                    (1 +
-                      (game.state.timeOfDay === "day"
-                        ? [
-                            "early_bird",
-                            "rethink",
-                            "mana_steal",
-                            "planning",
-                            "great_start",
-                            "the_right_moment",
-                          ]
-                        : [
-                            "from_the_dusk",
-                            "long_night",
-                            "mana_search",
-                            "midnight_meditation",
-                            "preparation",
-                            "sparing_power",
-                          ]
-                      ).indexOf(a.SelectTactic.tactic_id)),
-                )
-              : picture(
-                  a.PrepareExpedition?.item || a.LearnStartingSkill?.skill,
-                )) + button("act-" + i, label(a, p))
-          : "",
-      )
+      .map((a, i) => {
+        if (!filter(...pair(a))) return "";
+        const { title, detail, art } = choice(a, p),
+          face = art && picture(art, "choice-face");
+        const select =
+          '<button aria-label="' +
+          esc(title) +
+          '" data-action="act-' +
+          i +
+          '"><strong>' +
+          esc(title) +
+          "</strong>" +
+          (detail
+            ? '<span class="action-detail">' + esc(detail) + "</span>"
+            : "") +
+          "</button>";
+        return face
+          ? '<div class="art-choice"><button class="inspect-choice" aria-label="Inspect ' +
+              esc(title) +
+              ' artwork" data-action="inspect-' +
+              i +
+              '">' +
+              face +
+              "</button>" +
+              select +
+              "</div>"
+          : select;
+      })
       .join("") +
     "</div>"
   );
@@ -352,6 +675,11 @@ function render() {
     p.reputation +
     "</span></div>" +
     map(s, p) +
+    button(
+      "map-labels",
+      showMapLabels ? "Hide hex labels" : "Show hex labels",
+      "map-toggle",
+    ) +
     "<nav>" +
     ["Orders", "Hand", "Company", "Chronicle"]
       .map((t) => button(t, t, t === tab ? "active" : ""))
@@ -440,7 +768,7 @@ function render() {
             "</small>" +
             esc(c?.name || name(id)) +
             "<br><span>" +
-            esc(effect(c?.basic)) +
+            esc(effect(c?.basic, c?.basicText)) +
             "</span></button>"
           );
         })
@@ -455,7 +783,7 @@ function render() {
         Crystals: p.crystals,
         Mana: p.manaTokens,
         Tactic: p.selectedTactic,
-        Offers: s.offers,
+
         Combat: p.combatAccumulator,
       })
         .map(
@@ -463,6 +791,32 @@ function render() {
             "<details><summary>" + k + "</summary>" + info(v) + "</details>",
         )
         .join("");
+  if (tab === "Company") {
+    panel.innerHTML +=
+      "<h2>Offers</h2>" +
+      Object.entries(s.offers)
+        .map(([group, ids]) => {
+          if (!ids.length) return "";
+          return (
+            "<h3>" +
+            esc(name(group)) +
+            '</h3><div class="hand">' +
+            ids
+              .map(
+                (id) =>
+                  '<button class="card" data-offer="' +
+                  esc(id) +
+                  '">' +
+                  picture(id, "card-face") +
+                  esc(name(id)) +
+                  "</button>",
+              )
+              .join("") +
+            "</div>"
+          );
+        })
+        .join("");
+  }
   if (tab === "Chronicle")
     panel.innerHTML +=
       "<h2>Expedition chronicle</h2><ol reversed>" +
@@ -495,8 +849,32 @@ function act(i) {
       button("resume", "Reveal turn", "primary");
   } else render();
 }
+document.addEventListener("keydown", (e) => {
+  const hex = e.target.closest("[data-hex]");
+  if (hex && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    hex.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  }
+});
 document.addEventListener("click", (e) => {
   try {
+    const offer = e.target.closest("[data-offer]")?.dataset.offer;
+    if (offer) {
+      const matches = (k, v) =>
+        !k.startsWith("PlayCard") &&
+        [v.card_id, v.unit_id, v.advanced_action_id, v.item].includes(offer);
+      const available = game.actions.some((a) => matches(...pair(a)));
+      modal(
+        "<h2>" +
+          esc(name(offer)) +
+          "</h2>" +
+          picture(offer, "inspect") +
+          (available
+            ? orders(matches)
+            : "<p>This offer is available to inspect. You have no legal action to take it here right now.</p>"),
+      );
+      return;
+    }
     const hex = e.target.closest("[data-hex]")?.dataset.hex;
     if (hex) {
       const h = game.state.map.hexes[hex];
@@ -516,7 +894,24 @@ document.addEventListener("click", (e) => {
     }
     const id = e.target.closest("[data-action]")?.dataset.action;
     if (!id) return;
-    if (id === "start") start();
+    if (id === "map-labels") {
+      showMapLabels = !showMapLabels;
+      render();
+    } else if (id.startsWith("inspect-")) {
+      const i = Number(id.slice(8)),
+        p = game.state.players[game.player],
+        item = choice(game.actions[i], p);
+      modal(
+        "<h2>" +
+          esc(item.title) +
+          "</h2>" +
+          picture(item.art, "inspect") +
+          "<p>" +
+          esc(item.detail) +
+          "</p>" +
+          button("act-" + i, item.title, "primary"),
+      );
+    } else if (id === "start") start();
     else if (id === "resume") render();
     else if (id.startsWith("act-")) act(Number(id.slice(4)));
     else if (id.startsWith("card-")) {
@@ -529,9 +924,9 @@ document.addEventListener("click", (e) => {
           "</h2>" +
           picture(c?.name || p.hand[i], "inspect") +
           "<p>Basic · " +
-          esc(effect(c?.basic)) +
+          esc(effect(c?.basic, c?.basicText)) +
           "</p><p>Powered · " +
-          esc(effect(c?.powered)) +
+          esc(effect(c?.powered, c?.poweredText)) +
           "</p>" +
           orders((k, v) => k.startsWith("PlayCard") && v.hand_index === i),
       );
@@ -553,7 +948,8 @@ try {
     for (const action of journal.steps)
       game = command({ action, epoch: game.epoch });
     notice = "Expedition restored";
-    if (new URLSearchParams(location.search).get("screen") === "expeditions") setup();
+    if (new URLSearchParams(location.search).get("screen") === "expeditions")
+      setup();
     else render();
   } else setup();
 } catch (error) {

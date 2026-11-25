@@ -7,7 +7,19 @@ const { webkit, devices } = require("playwright");
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(process.argv[2]);
   await page.getByText("Begin expedition").click();
-  await page.getByText("Early bird", { exact: true }).click();
+  const preview = page.getByRole("button", {
+    name: "Inspect Early bird artwork",
+  });
+  await preview.click();
+  await page.locator("dialog mk-picture.inspect").waitFor({ state: "visible" });
+  await page.locator("#close").click();
+  await page.getByText("Show hex labels", { exact: true }).click();
+  await page.getByText("Hide hex labels", { exact: true }).click();
+  await page.getByRole("button", { name: "Early bird", exact: true }).click();
+  await page.getByRole("button", { name: "Company", exact: true }).click();
+  await page.locator("[data-offer]").first().click();
+  await page.locator("dialog mk-picture.inspect").waitFor({ state: "visible" });
+  await page.locator("#close").click();
   await page.getByRole("button", { name: "Hand", exact: true }).click();
   await page.locator(".card").first().click();
   await page.locator("dialog [data-action^=act]").first().click();

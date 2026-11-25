@@ -265,7 +265,18 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     let mut cards = serde_json::Map::new();
     for id in &p.hand {
         if let Some(c) = mk_data::cards::get_card(id.as_str()) {
-            cards.insert(id.to_string(),json!({"name":c.name,"color":c.color,"basic":c.basic_effect,"powered":c.powered_effect}));
+            cards.insert(id.to_string(),json!({"name":c.name,"color":c.color,"basic":c.basic_effect,"powered":c.powered_effect,"basicText":c.basic_effect.describe(),"poweredText":c.powered_effect.describe()}));
+        }
+    }
+    let mut unit_abilities = serde_json::Map::new();
+    for unit in &p.units {
+        if let Some(def) = mk_data::units::get_unit(unit.unit_id.as_str()) {
+            let abilities: Vec<_> = def
+                .abilities
+                .iter()
+                .map(|slot| json!({"effect":slot.ability.describe(),"mana":slot.mana_cost}))
+                .collect();
+            unit_abilities.insert(unit.instance_id.to_string(), json!(abilities));
         }
     }
     let mut actions = RETIRE.with_borrow(|v| {
@@ -316,7 +327,7 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         score = mines::score(s, score)
     }
     Ok(
-        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"events":events}),
+        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"unitAbilities":unit_abilities,"events":events}),
     )
 }
 #[no_mangle]
