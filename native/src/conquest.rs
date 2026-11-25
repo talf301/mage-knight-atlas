@@ -244,6 +244,104 @@ pub fn prepare_decks(s: &mut GameState) {
     s.rng.shuffle(&mut s.decks.artifact_deck);
 }
 
+// Capture the printed city defenders before the combat cleanup clears the hex.
+pub struct CityAssault {
+    coord: mk_types::hex::HexCoord,
+    shields: Vec<mk_types::ids::PlayerId>,
+    defeated: usize,
+}
+
+pub fn ending_assault(s: &GameState, action: &LegalAction) -> Option<CityAssault> {
+    if !matches!(action, LegalAction::EndCombatPhase) {
+        return None;
+    }
+    let combat = s.combat.as_ref()?;
+    if combat.combat_context == mk_types::enums::CombatContext::CooperativeAssault {
+        return None;
+    }
+    let coord = combat.combat_hex_coord?;
+    let h = s.map.hexes.get(&coord.key())?;
+    if !h
+        .site
+        .as_ref()
+        .is_some_and(|t| t.site_type == SiteType::City && !t.is_conquered)
+    {
+        return None;
+    }
+    let defeated = combat
+        .enemies
+        .iter()
+        .filter(|e| {
+            e.is_required_for_conquest && e.is_defeated && e.summoned_by_instance_id.is_none()
+        })
+        .count();
+    Some(CityAssault {
+        coord,
+        shields: h.shield_tokens.clone(),
+        defeated,
+    })
+}
+
+pub fn finish_assault(s: &mut GameState, i: usize, assault: CityAssault) {
+    if s.combat.is_some() {
+        return;
+    }
+    let h = s.map.hexes.get_mut(&assault.coord.key()).unwrap();
+    h.shield_tokens = assault.shields;
+    h.shield_tokens.extend(std::iter::repeat_n(
+        s.players[i].id.clone(),
+        assault.defeated,
+    ));
+    let site = h.site.as_mut().unwrap();
+    if site.is_conquered {
+        site.owner = city_leader(&h.shield_tokens).cloned()
+    }
+}
+
+fn city_leader(shields: &[mk_types::ids::PlayerId]) -> Option<&mk_types::ids::PlayerId> {
+    // Reverse iteration gives the first shield priority when totals tie.
+    shields
+        .iter()
+        .rev()
+        .max_by_key(|id| shields.iter().filter(|other| other == id).count())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn city_leadership_follows_majority_then_first_shield() {
+        let a: mk_types::ids::PlayerId = "a".into();
+        let b: mk_types::ids::PlayerId = "b".into();
+        assert_eq!(city_leader(&[a.clone(), b.clone()]), Some(&a));
+        assert_eq!(city_leader(&[a.clone(), b.clone(), b.clone()]), Some(&b));
+        assert_eq!(city_leader(&[]), None);
+    }
+    #[test]
+    fn collecting_both_cities_wins_solo_conquest() {
+        let mut s = solo(17, Hero::Tovak);
+        let id = s.players[0].id.clone();
+        for h in s.map.hexes.values_mut().take(2) {
+            h.site = Some(mk_types::state::Site {
+                site_type: SiteType::City,
+                owner: Some(id.clone()),
+                is_conquered: true,
+                is_burned: false,
+                city_color: None,
+                mine_color: None,
+                deep_mine_colors: None,
+            });
+            h.shield_tokens.push(id.clone());
+        }
+        s.final_score_result = Some(mk_engine::scoring::calculate_final_scores(&s));
+        let result = score(&s);
+        assert_eq!(result["player_results"][0]["outcome"], "victory");
+        assert_eq!(
+            result["player_results"][0]["module_results"]["both_cities"],
+            15
+        );
+    }
+}
 fn competitive_score(state: &GameState, mut value: Value) -> Value {
     let id = state.scenario_id.as_str();
     if !id.starts_with("blitz_conquest_") && !id.starts_with("full_conquest_") {

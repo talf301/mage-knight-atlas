@@ -214,6 +214,36 @@ pub fn before_entry(s: &mut GameState, i: usize) -> Result<(), String> {
     }
     Ok(())
 }
+pub fn replace_guard(s: &mut GameState, c: HexCoord) {
+    let h = s.map.hexes.get_mut(&c.key()).unwrap();
+    let Some(t) = h.site.as_ref() else { return };
+    if !adventure(t.site_type) || t.is_conquered || !h.enemies.is_empty() {
+        return;
+    }
+    let Some(tile) = s.map.tiles.iter().find(|tile| tile.tile_id == h.tile_id) else {
+        return;
+    };
+    let printed = tiles::get_tile_hexes(tile.tile_id).and_then(|hexes| {
+        hexes.iter().find(|def| {
+            def.local.q + tile.center_coord.q == c.q && def.local.r + tile.center_coord.r == c.r
+        })
+    });
+    if !printed.is_some_and(|def| def.site_type.is_none()) {
+        return;
+    }
+    let color = if t.site_type == SiteType::Dungeon {
+        EnemyColor::Brown
+    } else {
+        EnemyColor::Red
+    };
+    if let Some(token_id) = draw_enemy_token(&mut s.enemy_tokens, color, &mut s.rng) {
+        h.enemies.push(HexEnemy {
+            token_id,
+            color,
+            is_revealed: false,
+        });
+    }
+}
 pub fn permitted(s: &GameState, i: usize, a: &Value) -> bool {
     a.as_str() != Some("EnterSite") || !s.players[i].position.is_some_and(|c| is_conquered(s, c))
 }

@@ -178,12 +178,22 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
             if let Some(level) = conquest::city_level(s, &action) {
                 s.scenario_config.default_city_level = level;
             }
+            let assault = conquest::ending_assault(s, &action);
+            let battle_hex = s.combat.as_ref().and_then(|c| c.combat_hex_coord);
             let result = apply_legal_action(s, undo, i, &action, epoch);
             s.scenario_config.default_city_level = old_level;
             events = result.map_err(|e| format!("{e:?}"))?.events;
+            if let Some(assault) = assault {
+                conquest::finish_assault(s, i, assault)
+            }
             if dungeons::active(s) {
                 if s.map.tiles.len() > tile_count {
                     dungeons::reveal(s, tile_count)
+                }
+                if s.combat.is_none() {
+                    if let Some(c) = battle_hex {
+                        dungeons::replace_guard(s, c)
+                    }
                 }
                 dungeons::after(s);
             }

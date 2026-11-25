@@ -1,4 +1,4 @@
-const cacheName = "mage-knight-atlas-4";
+const cacheName = "mage-knight-atlas-5";
 const files = [
   "./",
   "./index.html",
@@ -26,7 +26,12 @@ self.addEventListener("install",event=>event.waitUntil((async()=>{
  for(let i=0;i<paths.length;i+=12)await cache.addAll(paths.slice(i,i+12));
 })()));
 self.addEventListener("activate", (event) =>
-  event.waitUntil(self.clients.claim()),
+  event.waitUntil((async () => {
+    for (const key of await caches.keys()) {
+      if (key.startsWith("mage-knight-atlas-") && key !== cacheName) await caches.delete(key);
+    }
+    await self.clients.claim();
+  })()),
 );
 self.addEventListener("fetch", (event) => {
   if (
