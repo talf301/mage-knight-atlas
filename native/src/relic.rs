@@ -359,7 +359,15 @@ pub fn finish(
         }
         if collected(s) == s.scenario_config.city_tile_count as usize {
             s.scenario_end_triggered = true;
+            // The current turn still has to close before the hero gets one final turn.
             s.final_turns_remaining = Some(2);
+            s.turn_order
+                .retain(|id| !mk_engine::dummy_player::is_dummy_player(id.as_str()));
+            s.current_player_index = s
+                .turn_order
+                .iter()
+                .position(|id| id == &s.players[i].id)
+                .unwrap_or(0) as u32;
         }
     } else {
         s.players[i].position = origin;
@@ -432,7 +440,13 @@ mod tests {
         }
         assert!(s.scenario_end_triggered);
         assert_eq!(s.final_turns_remaining, Some(2));
-        s.final_score_result = Some(mk_engine::scoring::calculate_final_scores(&s));
+        let remaining = s.dummy_player.as_ref().unwrap().deck.len();
+        mk_engine::end_turn::advance_turn_pub(&mut s, 0);
+        assert!(!s.game_ended);
+        assert_eq!(s.final_turns_remaining, Some(1));
+        assert_eq!(s.dummy_player.as_ref().unwrap().deck.len(), remaining);
+        mk_engine::end_turn::advance_turn_pub(&mut s, 0);
+        assert!(s.game_ended);
         let score = score(&s);
         let p = &score["player_results"][0];
         assert_eq!(p["outcome"], "victory");

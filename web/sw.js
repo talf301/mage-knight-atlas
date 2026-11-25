@@ -1,4 +1,4 @@
-const cacheName = "mage-knight-atlas-8";
+const cacheName = "mage-knight-atlas-9";
 const files = [
   "./",
   "./index.html",
