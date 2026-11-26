@@ -1,4 +1,5 @@
 import { picture, pieceId, faceURL } from "./artwork.js";
+import { mountHand } from "./hand.js";
 import { engine } from "./engine.mjs";
 const app = document.querySelector("#app"),
   dialog = document.querySelector("dialog"),
@@ -13,6 +14,7 @@ const heroes = [
   "braevalar",
 ];
 const key = "mage-knight-atlas.v1";
+let handPage = 0;
 let showMapLabels = false;
 let inspectMap = false,
   mapZoom = 1.5,
@@ -571,6 +573,7 @@ function start() {
   inspectMap = false;
   mapZoom = 1.5;
   feedback = "";
+  handPage = 0;
   game = command(init);
   journal = { init, steps: [] };
   tab = "Orders";
@@ -1415,19 +1418,38 @@ function render() {
         ? '<p class="objective">Explore the frontier and reveal a city.</p>'
         : "") +
     (choosing ? "" : fieldChoices(s, p)) +
-    '<div class="hand-head"><h2>Deed hand</h2><span>' +
+    '<div class="hand-head"><h2>Deed hand</h2><span class="fan-tip">Slide to read</span><span>' +
     p.deckCount +
     " in deck · " +
     p.discardCount +
     " discarded</span></div>" +
-    '<div class="hand-rail">' +
-    (handCards(p) || "<p>Your hand is empty.</p>") +
-    "</div>" +
+    '<div class="hand-rail"></div>' +
     '<nav aria-label="Expedition views">' +
     ["Orders", "Hand", "Company", "Chronicle"]
       .map((t) => button(t, t))
       .join("") +
     "</nav></div>";
+  const rail = document.querySelector(".hand-rail");
+  const cards = p.hand.map((id) => {
+    const c = game.cards[id],
+      title = c?.name || name(id);
+    return {
+      name: title,
+      color: c?.color || "wound",
+      url: faceURL(pieceId(c?.name || id)),
+      basic: effect(c?.basic, c?.basicText),
+      powered: effect(c?.powered, c?.poweredText),
+    };
+  });
+  function showHand(offset) {
+    handPage = offset;
+    rail.replaceChildren();
+    mountHand(rail, cards, offset, (next) => {
+      showHand(next);
+      rail.querySelector(".fan-slot")?.focus();
+    });
+  }
+  showHand(handPage);
   const wrap = document.querySelector(".map-window");
   if (wrap) {
     sizeMap(wrap);
@@ -1600,6 +1622,7 @@ function act(i) {
   if (ledger.open) ledger.close();
   tab = "Orders";
   if (before !== game.player) {
+    handPage = 0;
     document.body.classList.remove("playing");
     app.innerHTML =
       "<h1>Pass the phone</h1><p>Next seat · " +

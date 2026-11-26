@@ -1,8 +1,9 @@
-const cacheName = "mage-knight-atlas-16";
+const cacheName = "mage-knight-atlas-17";
 const files = [
   "./",
   "./index.html",
   "./app.js",
+  "./hand.js",
   "./artwork.js",
   "./faces.json",
   "./gems/blue.webp",
