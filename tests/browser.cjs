@@ -36,6 +36,7 @@ const { webkit, devices } = require("playwright");
   if (!(await page.locator("#ledger").isVisible()))
     await page.locator("#step").click();
   await page
+    .locator("#ledger")
     .getByRole("button", { name: "Take Early bird", exact: true })
     .click();
   await page.getByRole("button", { name: "Company", exact: true }).click();
@@ -133,24 +134,17 @@ const { webkit, devices } = require("playwright");
   await page.locator("#scenario").selectOption("lost_relic_solo");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByText("Begin expedition").click();
-  if (!(await page.locator("#ledger").isVisible()))
-    await page.locator("#step").click();
-  await page
+  const draft = page.locator(".field-choices");
+  await draft
     .getByRole("button", { name: /^Learn / })
     .first()
     .click();
-  if (!(await page.locator("#ledger").isVisible()))
-    await page.locator("#step").click();
-  await page
+  await draft
     .getByRole("button", { name: / · free$/ })
     .first()
     .click();
-  if (!(await page.locator("#ledger").isVisible()))
-    await page.locator("#step").click();
-  await page.getByRole("button", { name: /Finish preparation/i }).click();
-  if (!(await page.locator("#ledger").isVisible()))
-    await page.locator("#step").click();
-  await page
+  await draft.getByRole("button", { name: /Finish preparation/i }).click();
+  await draft
     .getByRole("button", { name: "Take Early bird", exact: true })
     .click();
   await page

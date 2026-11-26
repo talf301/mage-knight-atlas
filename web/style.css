@@ -702,10 +702,6 @@ footer {
   margin: 0;
   background: transparent;
 }
-.map-window.magnified .map {
-  width: 175%;
-  height: 175%;
-}
 .map .reachable {
   stroke: #a5da82;
   stroke-width: 1.8;
@@ -987,4 +983,236 @@ button:focus-visible {
   background: var(--gold);
   color: #251b0c;
   font-weight: bold;
+}
+.field-choices,
+.result-stage {
+  padding: 4px 10px;
+}
+.field-choices h2 {
+  margin: 1px 0 4px;
+  font:
+    bold 15px Georgia,
+    serif;
+}
+.choice-rail {
+  display: flex;
+  gap: 6px;
+  overflow: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 3px;
+}
+.stage-choice {
+  flex: 0 0 auto;
+  max-width: min(56vw, 240px);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 5px;
+  align-content: center;
+  text-align: left;
+  padding: 6px;
+  font-size: 13px;
+  scroll-snap-align: start;
+}
+.stage-choice span {
+  grid-column: 2;
+  font: 11px/1.25 system-ui;
+  color: var(--muted);
+}
+.stage-choice strong:first-child,
+.stage-choice strong:first-child + span {
+  grid-column: 1/-1;
+}
+.stage-face {
+  width: 36px;
+  height: 48px;
+  grid-row: span 2;
+  align-self: center;
+}
+.foes .foe {
+  min-width: 130px;
+  max-width: 210px;
+  align-content: start;
+  gap: 3px;
+}
+.foe button {
+  font-size: 13px;
+  padding: 5px;
+}
+.foes .targeted {
+  border: 2px solid var(--gold);
+}
+.foe .target-foe {
+  display: grid;
+  gap: 3px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+.target-foe b,
+.block-readout {
+  color: var(--gold);
+}
+.play-feedback {
+  padding: 3px 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--gold);
+}
+.map .frontier circle {
+  fill: #293a2d;
+  stroke: #ccaf6b;
+  stroke-dasharray: 2 2;
+}
+.map .frontier text {
+  font-size: 14px;
+}
+.battle-pool {
+  display: flex;
+  gap: 8px;
+  margin-block: 5px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.decision-stage,
+.site-stage {
+  position: absolute;
+  inset: 32px 0 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 3px 10px 12px;
+}
+.decision-stage .choice-rail,
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+  align-items: stretch;
+  gap: 6px;
+  overflow: visible;
+}
+.decision-stage .stage-choice {
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+.decision-stage .stage-face {
+  width: 100%;
+  height: 80px;
+}
+.site-stage h2,
+.site-stage p {
+  margin: 4px 0 8px;
+}
+.market-card {
+  min-width: 0;
+  text-align: left;
+  padding: 6px;
+}
+.market-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.market-card mk-picture.card-face {
+  height: 100px;
+}
+.field:has(.decision-stage) .stage,
+.field:has(.site-stage) .stage {
+  min-height: clamp(250px, 45svh, 520px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .battle-stage,
+  .site-stage,
+  .decision-stage {
+    animation: stage-enter 140ms ease-out;
+  }
+  @keyframes stage-enter {
+    from {
+      opacity: 0.6;
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+#mission:not(:empty) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #201b16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+#mission p {
+  margin: 3px 0;
+  font: 14px/1.4 system-ui;
+  color: var(--muted);
+}
+.mission-art {
+  flex: 0 0 64px;
+  height: 64px;
+}
+.seat-options {
+  font-size: 14px;
+}
+.step-hint {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.market-offer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #2a231c;
+}
+.market-card {
+  width: 100%;
+  flex: 1;
+  border: 0;
+  background: transparent;
+}
+.market-offer .stage-choice {
+  margin: 3px;
+  max-width: none;
+  min-height: 44px;
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.market-offer .stage-face {
+  display: none;
+}
+.field:has(.battle-stage) .stage {
+  min-height: clamp(245px, 45svh, 500px);
+}
+.battle-stage {
+  position: absolute;
+  inset: 28px 0 0;
+  padding: 4px 10px 8px;
+  overflow: auto;
+}
+.battle-stage h2 {
+  font-size: 20px;
+}
+@media (max-height: 680px) {
+  .hand-rail .card-face {
+    height: 60px;
+  }
+  .hand-head h2 {
+    font-size: 15px;
+  }
+  .battle-stage .foe-face {
+    height: 42px;
+    width: 42px;
+  }
+}
+
+.map .challenge {
+  stroke: #eb9679;
+  stroke-width: 1.8;
 }

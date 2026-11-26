@@ -14,6 +14,9 @@ const heroes = [
 ];
 const key = "mage-knight-atlas.v1";
 let showMapLabels = false;
+let inspectMap = false,
+  mapZoom = 1.5,
+  feedback = "";
 let command,
   game,
   journal,
@@ -444,7 +447,7 @@ function setup() {
           "primary",
         )
       : "") +
-    '<p><a href="table.html">Open Ultimate Edition tabletop →</a></p><section class="setup"><h2>New expedition</h2><label>Players<select id="count">' +
+    '<section class="setup"><h2>New expedition</h2><details class="seat-options"><summary>Player count · <span id="seat-count">Solo</span></summary><label>Players<select id="count">' +
     [1, 2, 3, 4]
       .map(
         (n) =>
@@ -455,9 +458,9 @@ function setup() {
           "</option>",
       )
       .join("") +
-    '</select></label><label>Scenario<select id="scenario"></select></label><div id="seats"></div>' +
+    '</select></label></details><label>Scenario<select id="scenario"></select></label><div id="mission"></div><div id="seats"></div>' +
     button("start", "Begin expedition", "primary") +
-    "</section>";
+    '</section><p><a href="table.html">Open Ultimate Edition tabletop →</a></p>';
   const seats = () => {
     const n = Number(document.querySelector("#count").value);
     document.querySelector("#scenario").innerHTML = (
@@ -480,6 +483,38 @@ function setup() {
     )
       .map(([k, t]) => '<option value="' + k + '">' + t + "</option>")
       .join("");
+    document.querySelector("#seat-count").textContent =
+      n === 1 ? "Solo" : n + " players";
+    const selector = document.querySelector("#scenario");
+    const updateMission = () => {
+      const description = {
+        solo: [
+          "starting_a",
+          "Find a city",
+          "Explore the frontier before the fourth round ends.",
+        ],
+        solo_conquest: [
+          "City tile 5",
+          "Conquer both cities",
+          "Begin at the portal. Build your deck and lead two successful city assaults.",
+        ],
+        lost_relic_solo: [
+          "Ancient Ruins",
+          "Recover the lost relic",
+          "Draft your starting equipment, then search the ruined cities for both pieces.",
+        ],
+      }[selector.value];
+      document.querySelector("#mission").innerHTML = description
+        ? picture(description[0], "mission-art") +
+          "<div><strong>" +
+          esc(description[1]) +
+          "</strong><p>" +
+          esc(description[2]) +
+          "</p></div>"
+        : "";
+    };
+    selector.onchange = updateMission;
+    updateMission();
     document.querySelector("#seats").innerHTML = Array.from(
       { length: n },
       (_, i) =>
@@ -533,6 +568,9 @@ function start() {
     heroes: chosen,
     scenario: document.querySelector("#scenario").value,
   };
+  inspectMap = false;
+  mapZoom = 1.5;
+  feedback = "";
   game = command(init);
   journal = { init, steps: [] };
   tab = "Orders";
@@ -550,6 +588,13 @@ const terrain = {
   wasteland: "#956b54",
 };
 function map(s, p) {
+  const heroFace = faceURL(pieceId(name(p.hero) + " Turn Order Token"));
+  const challenges = new Set(
+    game.actions
+      .map(pair)
+      .filter(([k]) => k === "ChallengeRampaging")
+      .map(([, v]) => v.hex.q + "," + v.hex.r),
+  );
   const moves = new Map(
     game.actions
       .map(pair)
@@ -561,8 +606,15 @@ function map(s, p) {
     x: 34.64 * (h.coord.q + h.coord.r / 2),
     y: 30 * h.coord.r,
   }));
-  const xs = cells.map((h) => h.x),
-    ys = cells.map((h) => h.y),
+  const frontier = game.actions.flatMap((a, i) => {
+    const [k, v] = pair(a);
+    if (k !== "Explore") return [];
+    const { q, r } = v.target_center;
+    return [{ i, x: 34.64 * (q + r / 2), y: 30 * r }];
+  });
+  const bounds = [...cells, ...frontier];
+  const xs = bounds.map((h) => h.x),
+    ys = bounds.map((h) => h.y),
     minX = Math.min(...xs) - 25,
     minY = Math.min(...ys) - 25;
   return (
@@ -571,7 +623,7 @@ function map(s, p) {
       " ",
     ) +
     '">' +
-    '<defs><clipPath id="tile-cut" clipPathUnits="objectBoundingBox"><polygon points="0,.4 .166667,.3 .166667,.1 .333333,0 .5,.1 .666667,0 .833333,.1 .833333,.3 1,.4 1,.6 .833333,.7 .833333,.9 .666667,1 .5,.9 .333333,1 .166667,.9 .166667,.7 0,.6"/></clipPath></defs>' +
+    '<defs><clipPath id="knight-cut"><circle r="8"/></clipPath><clipPath id="tile-cut" clipPathUnits="objectBoundingBox"><polygon points="0,.4 .166667,.3 .166667,.1 .333333,0 .5,.1 .666667,0 .833333,.1 .833333,.3 1,.4 1,.6 .833333,.7 .833333,.9 .666667,1 .5,.9 .333333,1 .166667,.9 .166667,.7 0,.6"/></clipPath></defs>' +
     (s.map.tiles || [])
       .map((t) => {
         const face = faceURL(pieceId(t.tileId));
@@ -596,7 +648,14 @@ function map(s, p) {
           here = p.position?.q === h.coord.q && p.position?.r === h.coord.r;
         return (
           '<g tabindex="0" role="button" aria-label="' +
-          esc(h.terrain + " " + key) +
+          esc(
+            h.terrain +
+              " " +
+              key +
+              (moves.has(key) && !inspectMap
+                ? " · Move " + moves.get(key)
+                : ""),
+          ) +
           '" data-hex="' +
           key +
           '" transform="translate(' +
@@ -604,7 +663,13 @@ function map(s, p) {
           " " +
           h.y +
           ')"><polygon class="' +
-          (here ? "here" : moves.has(key) ? "reachable" : "") +
+          (here
+            ? "here"
+            : challenges.has(key)
+              ? "challenge"
+              : moves.has(key)
+                ? "reachable"
+                : "") +
           '" fill="' +
           (terrain[h.terrain] || "#767957") +
           '" fill-opacity="' +
@@ -621,15 +686,39 @@ function map(s, p) {
               key +
               "</text>"
             : "") +
-          (!showMapLabels && (here || h.enemies.length)
-            ? '<text class="map-marker" y="3">' + (here ? "★" : "⚔") + "</text>"
-            : "") +
+          (here
+            ? '<g class="knight-marker" pointer-events="none"><g transform="translate(0 ' +
+              (showMapLabels ? -10 : 0) +
+              ')"><circle r="8.5" fill="#362719" stroke="#ffda82" stroke-width="1.5"/>' +
+              (heroFace
+                ? '<image clip-path="url(#knight-cut)" href="' +
+                  esc(heroFace) +
+                  '" x="-8" y="-8" width="16" height="16" preserveAspectRatio="xMidYMid slice"/>'
+                : '<text y="3">★</text>') +
+              "</g></g>"
+            : !showMapLabels && h.enemies.length
+              ? '<text class="map-marker" y="3">⚔</text>'
+              : "") +
           (moves.has(key)
             ? '<text class="move-cost" y="15">' + moves.get(key) + " MP</text>"
             : "") +
           "</g>"
         );
       })
+      .join("") +
+    frontier
+      .map(
+        ({ i, x, y }) =>
+          '<g class="frontier" role="button" tabindex="0" aria-label="Explore new tile at ' +
+          esc(describe(pair(game.actions[i])[1].target_center)) +
+          '" data-action="act-' +
+          i +
+          '" transform="translate(' +
+          x +
+          " " +
+          y +
+          ')"><circle r="15"/><text y="4">＋</text></g>',
+      )
       .join("") +
     "</svg>"
   );
@@ -643,7 +732,11 @@ function phasePrompt(s, p) {
   if (s.roundPhase === "tactics_selection")
     return "Choose your " + s.timeOfDay + " tactic";
   if (s.combat) return "Combat · " + name(s.combat.phase);
-  return "Choose a field order";
+  if (game.actions.some((a) => pair(a)[0] === "Move"))
+    return inspectMap ? "Inspect a hex" : "Tap a lit hex to move";
+  if (game.actions.some((a) => pair(a)[0] === "RecruitUnit"))
+    return "Recruit a unit or play Influence";
+  return "Play a deed or choose an action";
 }
 const acquisitions = new Set([
   "BuySpell",
@@ -860,6 +953,161 @@ function handCards(p) {
     })
     .join("");
 }
+function battlefieldTarget(k, v) {
+  const combat = game.state.combat;
+  if (!combat) return null;
+  if (k === "SubsetSelect") return game.battleView?.targets[v.index];
+  if (k === "DeclareBlock") return v.enemy_instance_id;
+  if (k === "AssignDamageToHero" || k === "AssignDamageToUnit")
+    return combat.enemies[v.enemy_index]?.instanceId;
+  return null;
+}
+function stageChoices(filter) {
+  const p = game.state.players[game.player];
+  return game.actions
+    .map((a, i) => {
+      const [k, v] = pair(a);
+      if (!filter(k, v)) return "";
+      const item = choice(a, p);
+      const label = (k === "SelectTactic" ? "Take " : "") + item.title;
+      return (
+        '<button class="stage-choice" aria-label="' +
+        esc(label) +
+        '" data-action="act-' +
+        i +
+        '">' +
+        (item.art ? picture(item.art, "stage-face") : "") +
+        "<strong>" +
+        esc(label) +
+        "</strong>" +
+        (item.detail ? "<span>" + esc(item.detail) + "</span>" : "") +
+        "</button>"
+      );
+    })
+    .join("");
+}
+function fieldChoices(s, p) {
+  if (s.gameEnded) {
+    const score = (game.score?.player_results ||
+      game.score?.playerResults ||
+      [])[game.player];
+    return (
+      '<section class="result-stage"><h2>' +
+      esc(score?.outcome ? name(score.outcome) : "Expedition ended") +
+      "</h2><p>" +
+      (score?.total_score != null || score?.team_score != null
+        ? "Score " + (score.total_score ?? score.team_score) + " · "
+        : "") +
+      esc(name(p.hero)) +
+      " · " +
+      p.fame +
+      " fame</p>" +
+      button("Orders", "View final scoring") +
+      "</section>"
+    );
+  }
+  const mandatory =
+    p.pending ||
+    s.roundPhase === "tactics_selection" ||
+    game.relic?.influence != null;
+  const excluded = new Set([
+    "Move",
+    "Explore",
+    "Undo",
+    "EndTurn",
+    "EndCombatPhase",
+    "ActivateUnit",
+    "UseSkill",
+    "ReturnInteractiveSkill",
+    "ResolveAttack",
+  ]);
+  const displayedOffers =
+    game.interacting && !s.combat && !mandatory
+      ? Object.values(s.offers).flat()
+      : [];
+  const buttons = stageChoices(
+    (k, v) =>
+      !excluded.has(k) &&
+      !displayedOffers.some((id) => offerMatch(id, k, v)) &&
+      !k.startsWith("PlayCard") &&
+      !battlefieldTarget(k, v) &&
+      !(
+        s.combat &&
+        p.pending?.kind === "attack_targets" &&
+        k === "SubsetConfirm"
+      ),
+  );
+  if (!buttons) return "";
+  const site =
+    p.position && s.map.hexes[p.position.q + "," + p.position.r]?.site;
+  const title = mandatory
+    ? phasePrompt(s, p)
+    : s.combat
+      ? "Battle actions"
+      : site
+        ? name(site.siteType) + " · actions"
+        : "Turn actions";
+  return (
+    '<section class="field-choices"><h2>' +
+    esc(title) +
+    '</h2><div class="choice-rail">' +
+    buttons +
+    "</div></section>"
+  );
+}
+function siteStage(s, p) {
+  const site = s.map.hexes[p.position.q + "," + p.position.r]?.site;
+  const offers = Object.entries(s.offers)
+    .flatMap(([group, ids]) =>
+      ids.flatMap((id) => {
+        const item = offerInfo(id, group);
+        const unit = game.offeredUnits[id];
+        const siteType = site?.siteType;
+        const relevant =
+          unit?.sites.includes(siteType) ||
+          (group === "spells" &&
+            (siteType === "mage_tower" || site?.cityColor === "blue")) ||
+          (group === "advancedActions" && site?.cityColor === "green");
+        if (!item.available && !relevant) return [];
+        const buy = stageChoices((k, v) => offerMatch(id, k, v));
+        return [
+          '<div class="market-offer"><button class="market-card" data-offer="' +
+            esc(id) +
+            '" data-group="' +
+            esc(group) +
+            '">' +
+            picture(id, "card-face") +
+            "<strong>" +
+            esc(game.cards[id]?.name || name(id)) +
+            "</strong><span>" +
+            esc(
+              item.available
+                ? "Available now"
+                : unit
+                  ? "Base cost " + unit.cost + " Influence"
+                  : "Inspect requirements",
+            ) +
+            "</span></button>" +
+            buy +
+            "</div>",
+        ];
+      }),
+    )
+    .join("");
+  return (
+    '<section class="site-stage"><h2>' +
+    esc(name(site?.siteType || "Site")) +
+    "</h2><p>" +
+    p.influencePoints +
+    " Influence · Reputation " +
+    p.reputation +
+    "</p>" +
+    (offers
+      ? '<div class="market-grid">' + offers + "</div>"
+      : "<p>Play Influence from your hand or use a site action below.</p>") +
+    "</section>"
+  );
+}
 function battleStage(combat) {
   const phases = {
     ranged_siege: "Ranged / siege",
@@ -896,13 +1144,71 @@ function battleStage(combat) {
         lines.push("Resists " + e.resistances.map(name).join(", "));
       if (e.isDefeated || e.isBlocked)
         lines.push(e.isDefeated ? "Defeated" : "Blocked");
-      return (
-        "<div>" +
+      const eligible = game.battleView?.targets.indexOf(e.instanceId) ?? -1;
+      const selected =
+        combat.declaredAttackTargets?.includes(e.instanceId) ||
+        (eligible >= 0 &&
+          game.state.players[game.player].pending?.kind === "attack_targets" &&
+          game.state.players[game.player].pending.selected?.includes(eligible));
+      const targets = game.actions.flatMap((a, i) =>
+        battlefieldTarget(...pair(a)) === e.instanceId ? [i] : [],
+      );
+      const select = targets.find(
+        (i) => pair(game.actions[i])[0] === "SubsetSelect",
+      );
+      const body =
         picture(e.enemyId, "foe-face") +
         "<strong>" +
         esc(e.name) +
         "</strong>" +
-        lines.map((t) => "<span>" + esc(t) + "</span>").join("") +
+        lines.map((t) => "<span>" + esc(t) + "</span>").join("");
+      const block = (game.battleView?.blocks[e.instanceId] || [])
+        .map((row) => {
+          const need = Math.max(0, row.required - row.effective);
+          return (
+            '<span class="block-readout">Hit ' +
+            (row.attack + 1) +
+            " · " +
+            row.effective +
+            "/" +
+            row.required +
+            " effective Block" +
+            (need ? " · need " + need : "") +
+            "</span>"
+          );
+        })
+        .join("");
+      return (
+        '<div class="foe ' +
+        (selected ? "targeted" : "") +
+        '">' +
+        (select != null
+          ? '<button class="target-foe" aria-pressed="' +
+            Boolean(selected) +
+            '" data-action="act-' +
+            select +
+            '">' +
+            body +
+            "<b>" +
+            (selected ? "Deselect" : "Target") +
+            "</b></button>"
+          : body) +
+        block +
+        targets
+          .filter((i) => i !== select)
+          .map((i) => {
+            const item = choice(
+              game.actions[i],
+              game.state.players[game.player],
+            );
+            return button(
+              "act-" + i,
+              item.title +
+                " · hit " +
+                (pair(game.actions[i])[1].attack_index + 1),
+            );
+          })
+          .join("") +
         "</div>"
       );
     })
@@ -915,6 +1221,26 @@ function battleStage(combat) {
     '</h2><div class="foes">' +
     enemies +
     "</div>" +
+    '<div class="battle-pool">' +
+    Object.entries(game.state.players[game.player].combatAccumulator.attack)
+      .filter(([k]) => ["normal", "ranged", "siege"].includes(k))
+      .map(
+        ([k, v]) =>
+          "<span>" +
+          { normal: "Melee", ranged: "Ranged", siege: "Siege" }[k] +
+          " " +
+          v +
+          "</span>",
+      )
+      .join("") +
+    "</div>" +
+    (combat.declaredAttackArmorNeeded != null
+      ? "<p>Target armor · " + combat.declaredAttackArmorNeeded + "</p>"
+      : "") +
+    (game.state.players[game.player].pending?.kind === "attack_targets"
+      ? quickAction("SubsetConfirm", "Confirm targets")
+      : "") +
+    quickAction("ResolveAttack", "Strike targets") +
     quickAction("EndCombatPhase", "Finish this phase") +
     "</section>"
   );
@@ -930,6 +1256,10 @@ function quickAction(kind, label) {
   return i < 0 ? "" : button("act-" + i, label);
 }
 function render() {
+  const previousMap = document.querySelector(".map-window");
+  const pan = previousMap
+    ? [previousMap.scrollLeft, previousMap.scrollTop]
+    : null;
   const url = new URL(location.href);
   if (url.searchParams.get("screen") === "expeditions") {
     url.searchParams.delete("screen");
@@ -943,6 +1273,20 @@ function render() {
         : name(journal.init.scenario.replace(/_\dp$/, ""));
   document.body.classList.add("playing");
   const day = s.timeOfDay === "day";
+  const choosing =
+    !s.combat &&
+    (s.gameEnded ||
+      !!p.pending ||
+      game.relic?.influence != null ||
+      game.actions.some((a) =>
+        [
+          "ChooseLevelUpSkill",
+          "ChooseLevelUpAdvancedAction",
+          "SelectReward",
+          "SelectArtifact",
+        ].includes(pair(a)[0]),
+      ));
+  const atMarket = !choosing && !s.combat && game.interacting && p.position;
   app.innerHTML =
     '<div class="field ' +
     (day ? "day" : "night") +
@@ -972,16 +1316,24 @@ function render() {
     '<div class="stage"><div class="scenario-name">' +
     esc(title) +
     "</div>" +
-    (s.combat
-      ? battleStage(s.combat)
-      : '<div class="map-window">' +
-        map(s, p) +
-        '</div><div class="map-tools">' +
-        button(
-          "map-labels",
-          showMapLabels ? "Hide hex labels" : "Show hex labels",
-        ) +
-        '<button data-action="map-scale" aria-label="Toggle map zoom">⛶</button></div>') +
+    (choosing
+      ? '<div class="decision-stage">' + fieldChoices(s, p) + "</div>"
+      : atMarket
+        ? siteStage(s, p)
+        : s.combat
+          ? battleStage(s.combat)
+          : '<div class="map-window">' +
+            map(s, p) +
+            '</div><div class="map-tools">' +
+            button(
+              "inspect-map",
+              inspectMap ? "Inspecting hexes" : "Inspect hexes",
+            ) +
+            button(
+              "map-labels",
+              showMapLabels ? "Hide hex labels" : "Show hex labels",
+            ) +
+            '<button data-action="map-scale" aria-label="Toggle map zoom">⛶</button><button data-action="center-hero" aria-label="Centre on hero">◎</button></div>') +
     "</div>" +
     '<div class="resources"><b>Move ' +
     p.movePoints +
@@ -1004,11 +1356,29 @@ function render() {
       )
       .join("") +
     "</span></div>" +
+    (feedback
+      ? '<p class="play-feedback" role="status">' + esc(feedback) + "</p>"
+      : "") +
     '<div class="command-row">' +
     quickAction("Undo", "Undo") +
-    '<button id="step" data-action="Orders">' +
-    esc(phasePrompt(s, p)) +
-    " →</button>" +
+    (s.combat ||
+    atMarket ||
+    choosing ||
+    game.actions.some((a) => pair(a)[0] === "Move")
+      ? '<span class="step-hint">' +
+        esc(
+          s.combat
+            ? s.combat.phase === "block"
+              ? "Play Block, then choose the hit to stop."
+              : s.combat.phase === "assign_damage"
+                ? "Assign incoming hits, then finish the phase."
+                : "Choose a foe and play attack cards."
+            : phasePrompt(s, p),
+        ) +
+        "</span>"
+      : '<button id="step" data-action="Orders">' +
+        esc(phasePrompt(s, p)) +
+        " →</button>") +
     quickAction("EndTurn", "End turn") +
     "</div>" +
     (game.relic
@@ -1035,6 +1405,16 @@ function render() {
         p.skills.map((id, i) => button("skill-" + i, name(id))).join("") +
         "</div>"
       : "") +
+    (journal.init.scenario === "solo_conquest"
+      ? '<p class="objective">Cities conquered · ' +
+        Object.values(s.map.hexes).filter(
+          (h) => h.site?.siteType === "city" && h.site.isConquered,
+        ).length +
+        " / 2</p>"
+      : journal.init.scenario === "solo"
+        ? '<p class="objective">Explore the frontier and reveal a city.</p>'
+        : "") +
+    (choosing ? "" : fieldChoices(s, p)) +
     '<div class="hand-head"><h2>Deed hand</h2><span>' +
     p.deckCount +
     " in deck · " +
@@ -1048,6 +1428,12 @@ function render() {
       .map((t) => button(t, t))
       .join("") +
     "</nav></div>";
+  const wrap = document.querySelector(".map-window");
+  if (wrap) {
+    sizeMap(wrap);
+    if (pan) wrap.scrollTo(...pan);
+    else centerHero(wrap);
+  }
   document.querySelector("#status").textContent = notice;
 }
 function renderPanel() {
@@ -1193,7 +1579,21 @@ function renderPanel() {
 function act(i) {
   const action = game.actions[i],
     before = game.player;
+  const p = game.state.players[before],
+    previous = p.position,
+    [kind, args] = pair(action);
+  const label = choice(action, p).title;
+  const target = battlefieldTarget(kind, args);
+  const targetName =
+    target &&
+    game.state.combat?.enemies.find((e) => e.instanceId === target)?.name;
   game = command({ action, epoch: game.epoch });
+  const next = game.state.players[game.player];
+  feedback = kind.startsWith("PlayCard")
+    ? name(args.card_id) + " · " + label
+    : kind === "SubsetSelect" && targetName
+      ? "Target selection · " + targetName
+      : label;
   journal.steps.push(action);
   persist();
   if (dialog.open) dialog.close();
@@ -1208,16 +1608,102 @@ function act(i) {
       button("resume", "Reveal turn", "primary");
   } else {
     render();
+    if (kind === "Move" && previous && next.position)
+      animateMove(previous, next.position);
     if (
-      game.state.players[game.player].pending ||
-      game.state.gameEnded ||
-      game.relic?.influence != null
+      game.state.players.length > 1 &&
+      (next.pending || game.state.gameEnded || game.relic?.influence != null)
     )
       openLedger("Orders");
   }
 }
+function sizeMap(wrap) {
+  const svg = wrap.querySelector(".map"),
+    box = svg.viewBox.baseVal;
+  svg.style.minWidth = box.width * mapZoom + "px";
+  svg.style.minHeight = box.height * mapZoom + "px";
+}
+function centerHero(wrap) {
+  const tile = wrap.querySelector(".here")?.getBoundingClientRect(),
+    r = wrap.getBoundingClientRect();
+  if (tile)
+    wrap.scrollBy(
+      tile.left + tile.width / 2 - r.left - r.width / 2,
+      tile.top + tile.height / 2 - r.top - r.height / 2,
+    );
+}
+let pinch = null;
+const spread = (touches) =>
+  Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY,
+  );
+document.addEventListener(
+  "touchstart",
+  (e) => {
+    const wrap = e.target.closest(".map-window");
+    if (!wrap || e.touches.length !== 2) return;
+    const svg = wrap.querySelector(".map").getBoundingClientRect();
+    pinch = {
+      wrap,
+      start: spread(e.touches),
+      scale: mapZoom,
+      x:
+        ((e.touches[0].clientX + e.touches[1].clientX) / 2 - svg.left) /
+        svg.width,
+      y:
+        ((e.touches[0].clientY + e.touches[1].clientY) / 2 - svg.top) /
+        svg.height,
+    };
+    e.preventDefault();
+  },
+  { passive: false },
+);
+document.addEventListener(
+  "touchmove",
+  (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const { wrap, start, scale, x, y } = pinch;
+    mapZoom = Math.max(
+      0.5,
+      Math.min(4, (scale * spread(e.touches)) / Math.max(start, 1)),
+    );
+    sizeMap(wrap);
+    const svg = wrap.querySelector(".map"),
+      r = wrap.getBoundingClientRect();
+    wrap.scrollTo(
+      x * svg.clientWidth -
+        (e.touches[0].clientX + e.touches[1].clientX) / 2 +
+        r.left,
+      y * svg.clientHeight -
+        (e.touches[0].clientY + e.touches[1].clientY) / 2 +
+        r.top,
+    );
+  },
+  { passive: false },
+);
+for (const event of ["touchend", "touchcancel"])
+  document.addEventListener(event, () => {
+    pinch = null;
+  });
+function animateMove(from, to) {
+  const wrap = document.querySelector(".map-window");
+  if (wrap) centerHero(wrap);
+  const marker = document.querySelector(".knight-marker");
+  if (!marker || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const dr = from.r - to.r,
+    dx = 34.64 * (from.q - to.q + dr / 2);
+  marker.animate(
+    [
+      { transform: "translate(" + dx + "px," + 30 * dr + "px)" },
+      { transform: "translate(0,0)" },
+    ],
+    { duration: 260, easing: "ease-out" },
+  );
+}
 document.addEventListener("keydown", (e) => {
-  const hex = e.target.closest("[data-hex]");
+  const hex = e.target.closest("[data-hex],.frontier");
   if (hex && (e.key === "Enter" || e.key === " ")) {
     e.preventDefault();
     hex.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1257,6 +1743,24 @@ document.addEventListener("click", (e) => {
       const h = game.state.map.hexes[hex];
       const p = game.state.players[game.player];
       const here = p.position?.q === h.coord.q && p.position?.r === h.coord.r;
+      const moveIndex = game.actions.findIndex((a) => {
+        const [k, v] = pair(a);
+        return k === "Move" && v.target.q + "," + v.target.r === hex;
+      });
+      if (
+        moveIndex >= 0 &&
+        !inspectMap &&
+        !game.provokes.includes(hex) &&
+        !h.enemies?.length &&
+        !(
+          h.site &&
+          !h.site.isConquered &&
+          ["city", "keep", "mage_tower"].includes(h.site.siteType)
+        )
+      ) {
+        act(moveIndex);
+        return;
+      }
       const matches = (k, v) =>
         [v.target, v.hex, v.target_center].some(
           (t) => t && t.q + "," + t.r === hex,
@@ -1275,6 +1779,9 @@ document.addEventListener("click", (e) => {
           esc(name(h.terrain)) +
           "</h2>" +
           hexPreview(h) +
+          (game.provokes.includes(hex)
+            ? "<p>This move provokes a rampaging enemy. Moving starts combat.</p>"
+            : "") +
           "<p>" +
           (here ? "Your position · " : "") +
           "Hex " +
@@ -1342,12 +1849,18 @@ document.addEventListener("click", (e) => {
       setup();
       return;
     }
-    if (id === "map-scale") {
+    if (id === "inspect-map") {
+      inspectMap = !inspectMap;
+      render();
+      return;
+    }
+    if (id === "map-scale" || id === "center-hero") {
       const wrap = document.querySelector(".map-window");
-      if (wrap.classList.toggle("magnified"))
-        wrap
-          .querySelector(".here")
-          ?.scrollIntoView({ block: "nearest", inline: "center" });
+      if (id === "map-scale") {
+        mapZoom = mapZoom >= 1.4 ? 0.6 : 1.6;
+        sizeMap(wrap);
+      }
+      centerHero(wrap);
       return;
     }
     if (id === "map-labels") {

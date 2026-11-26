@@ -1,3 +1,4 @@
+mod battle_view;
 mod conquest;
 mod druid;
 mod dungeons;
@@ -261,6 +262,12 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
     let i = current(s);
     let p = &s.players[i];
     let legal = enumerate_legal_actions_with_undo(s, i, undo);
+    let provokes: Vec<_> = legal.actions.iter().filter_map(|action| {
+        let mk_types::legal_action::LegalAction::Move { target, .. } = action else {return None};
+        let from = p.position?;
+        (!mk_engine::movement::find_provoked_rampaging_enemies(s, i, from, *target).is_empty())
+            .then(|| target.key())
+    }).collect();
     let view = to_client_state(s, &p.id);
     let mut cards = serde_json::Map::new();
     for id in p.hand.iter().chain(&view.offers.advanced_actions).chain(&view.offers.spells) {
@@ -344,7 +351,7 @@ fn process_command(slot: &mut Option<(GameState, UndoStack)>, cmd: Value) -> Res
         score = mines::score(s, score)
     }
     Ok(
-        json!({"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"offeredUnits":offered_units,"unitAbilities":unit_abilities,"events":events}),
+        json!({"interacting":p.flags.contains(mk_types::state::PlayerFlags::IS_INTERACTING),"provokes":provokes,"battleView":battle_view::view(s,i),"relic":relic::view(s),"score":score,"state":view,"player":i,"actions":actions,"epoch":legal.epoch,"cards":cards,"offeredUnits":offered_units,"unitAbilities":unit_abilities,"events":events}),
     )
 }
 #[no_mangle]
