@@ -16,19 +16,25 @@ const { webkit, devices } = require("playwright");
     .locator("nav button")
     .evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().top));
   assert.equal(new Set(tops).size, 1);
+  await page.locator("#dismiss-ledger").click();
   const lake = page.locator('.map [aria-label^="lake "]').first();
   await lake.click();
   await page.getByRole("img", { name: "Selected lake hex" }).waitFor();
   assert.equal(await page.locator("dialog .hex-preview image").count(), 1);
   await page.locator("#close").click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   const preview = page.getByRole("button", {
     name: "Inspect Early bird artwork",
   });
   await preview.click();
   await page.locator("dialog mk-picture.inspect").waitFor({ state: "visible" });
   await page.locator("#close").click();
+  await page.locator("#dismiss-ledger").click();
   await page.getByText("Show hex labels", { exact: true }).click();
   await page.getByText("Hide hex labels", { exact: true }).click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   await page
     .getByRole("button", { name: "Take Early bird", exact: true })
     .click();
@@ -40,8 +46,8 @@ const { webkit, devices } = require("playwright");
   await page.getByText(/conquered green city/).waitFor();
   await page.locator("dialog mk-picture.inspect").waitFor({ state: "visible" });
   await page.locator("#close").click();
-  await page.getByRole("button", { name: "Hand", exact: true }).click();
-  await page.locator(".card").first().click();
+  await page.locator("#dismiss-ledger").click();
+  await page.locator(".hand-rail .card").first().click();
   const sideways = page
     .locator("dialog button")
     .filter({ hasText: /Play sideways/ })
@@ -66,7 +72,7 @@ const { webkit, devices } = require("playwright");
   await page.locator("dialog [data-action^=act]").first().click();
   await page.reload();
   await page.getByText("Expedition restored").waitFor();
-  await page.getByText("Expeditions", { exact: true }).click();
+  await page.getByRole("button", { name: "Expeditions", exact: true }).click();
   await page.getByText("Open Ultimate Edition tabletop").click();
   await page.locator("#sc").selectOption("Life and Death");
   await page.getByText("Lay out components").click();
@@ -123,19 +129,27 @@ const { webkit, devices } = require("playwright");
   console.log(
     "PASS mobile WebKit: tactic, deed play, reload, expansion table, tile placement, end turn, persisted table and offline reload",
   );
-  await page.getByText("Expeditions", { exact: true }).click();
+  await page.getByRole("button", { name: "Expeditions", exact: true }).click();
   await page.locator("#scenario").selectOption("lost_relic_solo");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByText("Begin expedition").click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   await page
     .getByRole("button", { name: /^Learn / })
     .first()
     .click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   await page
     .getByRole("button", { name: / · free$/ })
     .first()
     .click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   await page.getByRole("button", { name: /Finish preparation/i }).click();
+  if (!(await page.locator("#ledger").isVisible()))
+    await page.locator("#step").click();
   await page
     .getByRole("button", { name: "Take Early bird", exact: true })
     .click();

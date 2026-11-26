@@ -409,6 +409,7 @@ const button = (id, text, cls = "") =>
   "</button>";
 function modal(html) {
   article.innerHTML = html;
+  article.classList.toggle("card-sheet", !!article.querySelector(".zoom-art"));
   const heading = article.querySelector("h2");
   document.querySelector("#sheet-title").textContent =
     heading?.textContent || "Expedition";
@@ -433,6 +434,7 @@ document.querySelector("#books").onclick = () =>
         .join(""),
   );
 function setup() {
+  document.body.classList.remove("playing");
   app.innerHTML =
     "<small>Atlantean Empire</small><h1>Choose an expedition</h1><p>Lead a Mage Knight through the frontier. Explore new terrain, recruit allies and build your deck.</p>" +
     (game
@@ -483,7 +485,7 @@ function setup() {
       (_, i) =>
         "<label>Hero " +
         (i + 1) +
-        '<select class="hero">' +
+        '<span class="hero-select"><i></i><select class="hero">' +
         heroes
           .map(
             (h, j) =>
@@ -496,8 +498,18 @@ function setup() {
               "</option>",
           )
           .join("") +
-        "</select></label>",
+        "</select></span></label>",
     ).join("");
+    for (const select of document.querySelectorAll(".hero")) {
+      const portrait = () => {
+        select.previousElementSibling.innerHTML = picture(
+          name(select.value) + " Turn Order Token",
+          "portrait",
+        );
+      };
+      select.onchange = portrait;
+      portrait();
+    }
   };
   document.querySelector("#count").onchange = seats;
   seats();
@@ -538,6 +550,12 @@ const terrain = {
   wasteland: "#956b54",
 };
 function map(s, p) {
+  const moves = new Map(
+    game.actions
+      .map(pair)
+      .filter(([k]) => k === "Move")
+      .map(([, v]) => [v.target.q + "," + v.target.r, v.cost]),
+  );
   const cells = Object.values(s.map.hexes).map((h) => ({
     ...h,
     x: 34.64 * (h.coord.q + h.coord.r / 2),
@@ -586,7 +604,7 @@ function map(s, p) {
           " " +
           h.y +
           ')"><polygon class="' +
-          (here ? "here" : "") +
+          (here ? "here" : moves.has(key) ? "reachable" : "") +
           '" fill="' +
           (terrain[h.terrain] || "#767957") +
           '" fill-opacity="' +
@@ -605,6 +623,9 @@ function map(s, p) {
             : "") +
           (!showMapLabels && (here || h.enemies.length)
             ? '<text class="map-marker" y="3">' + (here ? "★" : "⚔") + "</text>"
+            : "") +
+          (moves.has(key)
+            ? '<text class="move-cost" y="15">' + moves.get(key) + " MP</text>"
             : "") +
           "</g>"
         );
@@ -800,6 +821,114 @@ function info(value) {
     "</dl>"
   );
 }
+const ledger = document.querySelector("#ledger");
+document.querySelector("#dismiss-ledger").onclick = () => ledger.close();
+for (const sheet of [ledger, dialog]) {
+  sheet.addEventListener("click", (e) => {
+    if (e.target !== sheet) return;
+    const r = sheet.getBoundingClientRect();
+    if (
+      e.clientY < r.top ||
+      e.clientX < r.left ||
+      e.clientX > r.right ||
+      e.clientY > r.bottom
+    )
+      sheet.close();
+  });
+}
+function handCards(p) {
+  return p.hand
+    .map((id, i) => {
+      const c = game.cards[id],
+        title = c?.name || name(id),
+        color = c?.color || "wound";
+      return (
+        '<button data-action="card-' +
+        i +
+        '" class="card deed ' +
+        esc(color) +
+        '">' +
+        picture(c?.name || id, "card-face") +
+        "<strong>" +
+        esc(title) +
+        "</strong><small>" +
+        esc(color) +
+        "</small>" +
+        ("<span>" + esc(effect(c?.basic, c?.basicText)) + "</span>") +
+        "</button>"
+      );
+    })
+    .join("");
+}
+function battleStage(combat) {
+  const phases = {
+    ranged_siege: "Ranged / siege",
+    block: "Block",
+    assign_damage: "Damage",
+    attack: "Attack",
+  };
+  const progress = Object.entries(phases)
+    .map(
+      ([key, title]) =>
+        "<li" +
+        (key === combat.phase ? ' aria-current="step"' : "") +
+        ">" +
+        title +
+        "</li>",
+    )
+    .join("");
+  const enemies = combat.enemies
+    .map((e) => {
+      const attacks = e.attacks?.length
+        ? e.attacks
+        : [{ damage: e.attack, element: e.attackElement }];
+      const lines = attacks.map(
+        (a) =>
+          "Attack " +
+          a.damage +
+          " · " +
+          name(a.element) +
+          (a.ability ? " · " + name(a.ability) : ""),
+      );
+      lines.push("Armor " + e.armor);
+      if (e.abilities.length) lines.push(e.abilities.map(name).join(" · "));
+      if (e.resistances.length)
+        lines.push("Resists " + e.resistances.map(name).join(", "));
+      if (e.isDefeated || e.isBlocked)
+        lines.push(e.isDefeated ? "Defeated" : "Blocked");
+      return (
+        "<div>" +
+        picture(e.enemyId, "foe-face") +
+        "<strong>" +
+        esc(e.name) +
+        "</strong>" +
+        lines.map((t) => "<span>" + esc(t) + "</span>").join("") +
+        "</div>"
+      );
+    })
+    .join("");
+  return (
+    '<section class="battle-stage"><ol class="battle-phases" aria-label="Battle phases">' +
+    progress +
+    "</ol><h2>" +
+    esc(phases[combat.phase] || name(combat.phase)) +
+    '</h2><div class="foes">' +
+    enemies +
+    "</div>" +
+    quickAction("EndCombatPhase", "Finish this phase") +
+    "</section>"
+  );
+}
+function openLedger(view) {
+  tab = view;
+  renderPanel();
+  if (!ledger.open) ledger.showModal();
+  document.querySelector("#panel").scrollTop = 0;
+}
+function quickAction(kind, label) {
+  const i = game.actions.findIndex((a) => pair(a)[0] === kind);
+  return i < 0 ? "" : button("act-" + i, label);
+}
 function render() {
   const url = new URL(location.href);
   if (url.searchParams.get("screen") === "expeditions") {
@@ -812,42 +941,121 @@ function render() {
       journal.init.scenario === "solo"
         ? "First Reconnaissance"
         : name(journal.init.scenario.replace(/_\dp$/, ""));
+  document.body.classList.add("playing");
+  const day = s.timeOfDay === "day";
   app.innerHTML =
-    "<small>" +
-    esc(title) +
-    " · " +
-    name(s.timeOfDay) +
+    '<div class="field ' +
+    (day ? "day" : "night") +
+    '"><div class="hud"><div class="round-clock"><span aria-hidden="true">' +
+    (day ? "☀" : "☾") +
+    "</span><b>" +
+    esc(name(s.timeOfDay)) +
     " " +
     s.round +
-    " / " +
+    "/" +
     s.totalRounds +
-    "</small><h1>" +
+    "</b></div>" +
+    '<button data-action="hero" class="hero-hud">' +
     picture(name(p.hero) + " Turn Order Token", "portrait") +
+    "<strong>" +
     esc(name(p.hero)) +
-    '</h1><button id="step" data-action="Orders">' +
+    "</strong><span>Lv " +
+    p.level +
+    " · Fame " +
+    p.fame +
+    "</span></button>" +
+    '<div class="defence">Armor ' +
+    p.armor +
+    "<br>Rep " +
+    p.reputation +
+    '</div><button data-action="menu" aria-label="Expeditions">☰</button></div>' +
+    '<div class="stage"><div class="scenario-name">' +
+    esc(title) +
+    "</div>" +
+    (s.combat
+      ? battleStage(s.combat)
+      : '<div class="map-window">' +
+        map(s, p) +
+        '</div><div class="map-tools">' +
+        button(
+          "map-labels",
+          showMapLabels ? "Hide hex labels" : "Show hex labels",
+        ) +
+        '<button data-action="map-scale" aria-label="Toggle map zoom">⛶</button></div>') +
+    "</div>" +
+    '<div class="resources"><b>Move ' +
+    p.movePoints +
+    "</b><b>Influence " +
+    p.influencePoints +
+    "</b>" +
+    (p.healingPoints ? "<b>Heal " + p.healingPoints + "</b>" : "") +
+    "<span>Source " +
+    s.source.dice
+      .map(
+        (d) =>
+          '<i class="die ' +
+          (d.isDepleted ? "spent" : "") +
+          '" role="img" aria-label="' +
+          esc(d.color + (d.isDepleted ? " spent" : "")) +
+          '">' +
+          picture(name(d.color) + " Mana") +
+          esc(name(d.color)) +
+          "</i>",
+      )
+      .join("") +
+    "</span></div>" +
+    '<div class="command-row">' +
+    quickAction("Undo", "Undo") +
+    '<button id="step" data-action="Orders">' +
     esc(phasePrompt(s, p)) +
     " →</button>" +
+    quickAction("EndTurn", "End turn") +
+    "</div>" +
+    (game.relic
+      ? '<p class="objective">' +
+        (game.relic.influence != null
+          ? game.relic.influence + " preparation influence"
+          : "Relic pieces recovered · " +
+            game.relic.collected +
+            " / " +
+            game.relic.goal) +
+        "</p>"
+      : "") +
+    (p.units.length || p.skills.length
+      ? '<div class="party">' +
+        p.units
+          .map((u, i) =>
+            button(
+              "unit-" + i,
+              name(u.unitId) +
+                (u.wounded ? " · wounded" : " · " + name(u.state)),
+            ),
+          )
+          .join("") +
+        p.skills.map((id, i) => button("skill-" + i, name(id))).join("") +
+        "</div>"
+      : "") +
+    '<div class="hand-head"><h2>Deed hand</h2><span>' +
+    p.deckCount +
+    " in deck · " +
+    p.discardCount +
+    " discarded</span></div>" +
+    '<div class="hand-rail">' +
+    (handCards(p) || "<p>Your hand is empty.</p>") +
+    "</div>" +
     '<nav aria-label="Expedition views">' +
     ["Orders", "Hand", "Company", "Chronicle"]
-      .map((t) => button(t, t, t === tab ? "active" : ""))
+      .map((t) => button(t, t))
       .join("") +
-    '</nav><div class="stats"><b>Fame ' +
-    p.fame +
-    "</b><span>Level " +
-    p.level +
-    "</span><span>Armor " +
-    p.armor +
-    "</span><span>Reputation " +
-    p.reputation +
-    "</span></div>" +
-    map(s, p) +
-    button(
-      "map-labels",
-      showMapLabels ? "Hide hex labels" : "Show hex labels",
-      "map-toggle",
-    ) +
-    '<section id="panel"></section>';
+    "</nav></div>";
+  document.querySelector("#status").textContent = notice;
+}
+function renderPanel() {
+  const s = game.state,
+    p = s.players[game.player];
+  document.querySelector("#ledger-title").textContent = tab;
   const panel = document.querySelector("#panel");
+  panel.innerHTML = "";
   if (s.gameEnded)
     panel.innerHTML =
       "<h2>Expedition ended</h2>" +
@@ -910,31 +1118,7 @@ function render() {
       " in deck · " +
       p.discardCount +
       ' discarded</p><div class="hand">' +
-      p.hand
-        .map((id, i) => {
-          const c = game.cards[id];
-          return (
-            '<button data-action="card-' +
-            i +
-            '" class="card" style="--accent:' +
-            ({
-              red: "#994536",
-              blue: "#456777",
-              white: "#cdbf99",
-              green: "#557650",
-            }[c?.color] || "#866") +
-            '">' +
-            picture(c?.name || id, "card-face") +
-            "<small>" +
-            esc(c?.color || "Wound") +
-            "</small>" +
-            esc(c?.name || name(id)) +
-            "<br><span>" +
-            esc(effect(c?.basic, c?.basicText)) +
-            "</span></button>"
-          );
-        })
-        .join("") +
+      handCards(p) +
       "</div>";
   if (tab === "Company")
     panel.innerHTML +=
@@ -1013,14 +1197,24 @@ function act(i) {
   journal.steps.push(action);
   persist();
   if (dialog.open) dialog.close();
+  if (ledger.open) ledger.close();
   tab = "Orders";
   if (before !== game.player) {
+    document.body.classList.remove("playing");
     app.innerHTML =
       "<h1>Pass the phone</h1><p>Next seat · " +
       name(game.state.players[game.player].hero) +
       "</p>" +
       button("resume", "Reveal turn", "primary");
-  } else render();
+  } else {
+    render();
+    if (
+      game.state.players[game.player].pending ||
+      game.state.gameEnded ||
+      game.relic?.influence != null
+    )
+      openLedger("Orders");
+  }
 }
 document.addEventListener("keydown", (e) => {
   const hex = e.target.closest("[data-hex]");
@@ -1098,6 +1292,64 @@ document.addEventListener("click", (e) => {
     }
     const id = e.target.closest("[data-action]")?.dataset.action;
     if (!id) return;
+    if (id === "hero") {
+      const p = game.state.players[game.player];
+      modal(
+        "<h2>" +
+          esc(name(p.hero)) +
+          "</h2>" +
+          info({
+            level: p.level,
+            fame: p.fame,
+            armor: p.armor,
+            reputation: p.reputation,
+            handLimit: p.handLimit,
+            commandTokens: p.commandTokens,
+          }),
+      );
+      return;
+    }
+    if (id.startsWith("unit-") || id.startsWith("skill-")) {
+      const p = game.state.players[game.player],
+        [kind, index] = id.split("-");
+      const unit = kind === "unit" ? p.units[index] : null;
+      const piece = unit?.unitId || p.skills[index];
+      const matches = (k, v) =>
+        unit
+          ? k === "ActivateUnit" && v.unit_instance_id === unit.instanceId
+          : ["UseSkill", "ReturnInteractiveSkill"].includes(k) &&
+            v.skill_id === piece;
+      modal(
+        "<h2>" +
+          esc(name(piece)) +
+          "</h2>" +
+          picture(piece, "inspect") +
+          (unit
+            ? "<p>Level " +
+              unit.level +
+              " · " +
+              esc(name(unit.state)) +
+              (unit.wounded ? " · Wounded" : "") +
+              "</p>"
+            : "") +
+          (game.actions.some((a) => matches(...pair(a)))
+            ? orders(matches)
+            : "<p>No activation available right now.</p>"),
+      );
+      return;
+    }
+    if (id === "menu") {
+      setup();
+      return;
+    }
+    if (id === "map-scale") {
+      const wrap = document.querySelector(".map-window");
+      if (wrap.classList.toggle("magnified"))
+        wrap
+          .querySelector(".here")
+          ?.scrollIntoView({ block: "nearest", inline: "center" });
+      return;
+    }
     if (id === "map-labels") {
       showMapLabels = !showMapLabels;
       render();
@@ -1177,9 +1429,7 @@ document.addEventListener("click", (e) => {
           "</div>",
       );
     } else {
-      tab = id;
-      render();
-      document.querySelector("#panel").scrollIntoView({ block: "start" });
+      openLedger(id);
     }
   } catch (error) {
     modal("<p>" + esc(error.message) + "</p>");
